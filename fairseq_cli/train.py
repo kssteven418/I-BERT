@@ -78,6 +78,7 @@ def main(args):
             sum(p.numel() for p in model.parameters() if p.requires_grad),
         )
     )
+    logger.info("quantize: {}".format(args.quant_mode))
 
     # (optionally) Configure quantization
     if args.quantization_config_path is not None:

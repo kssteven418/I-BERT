@@ -16,7 +16,7 @@ from fairseq.modules import (
 from fairseq.modules.quant_noise import quant_noise
 from fairseq.modules.fairseq_dropout import FairseqDropout
 
-
+from quantization.utils.quant_modules import *
 
 class TransformerSentenceEncoderLayer(nn.Module):
     """
@@ -37,11 +37,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
         q_noise: float = 0.0,
         qn_block_size: int = 8,
         init_fn: Callable = None,
+        quant_mode: str = 'none',
     ) -> None:
         super().__init__()
 
         if init_fn is not None:
             init_fn()
+
+        self.quant_mode = quant_mode
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -57,6 +60,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             self_attention=True,
             q_noise=q_noise,
             qn_block_size=qn_block_size,
+            quant_mode=quant_mode,
         )
 
         # layer norm associated with the self attention layer
@@ -96,6 +100,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self_attention,
         q_noise,
         qn_block_size,
+        quant_mode,
     ):
         return MultiheadAttention(
             embed_dim,
@@ -104,6 +109,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             self_attention=True,
             q_noise=q_noise,
             qn_block_size=qn_block_size,
+            quant_mode=quant_mode,
         )
 
     def forward(

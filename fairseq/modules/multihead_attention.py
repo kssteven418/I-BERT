@@ -16,6 +16,7 @@ from fairseq.incremental_decoding_utils import with_incremental_state
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
+from quantization.utils.quant_modules import *
 
 @with_incremental_state
 class MultiheadAttention(nn.Module):
@@ -38,8 +39,10 @@ class MultiheadAttention(nn.Module):
         encoder_decoder_attention=False,
         q_noise=0.0,
         qn_block_size=8,
+        quant_mode='none',
     ):
         super().__init__()
+        self.quant_mode = quant_mode
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
@@ -63,9 +66,16 @@ class MultiheadAttention(nn.Module):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
-        self.k_proj = quant_noise(nn.Linear(self.kdim, embed_dim, bias=bias), q_noise, qn_block_size)
-        self.v_proj = quant_noise(nn.Linear(self.vdim, embed_dim, bias=bias), q_noise, qn_block_size)
-        self.q_proj = quant_noise(nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size)
+        k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        q_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        k_proj.set_param(nn.Linear(self.kdim, embed_dim, bias=bias))
+        v_proj.set_param(nn.Linear(self.vdim, embed_dim, bias=bias))
+        q_proj.set_param(nn.Linear(embed_dim, embed_dim, bias=bias))
+
+        self.k_proj = quant_noise(k_proj, q_noise, qn_block_size)
+        self.v_proj = quant_noise(v_proj, q_noise, qn_block_size)
+        self.q_proj = quant_noise(q_proj, q_noise, qn_block_size)
 
         self.out_proj = quant_noise(nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size)
 
@@ -153,6 +163,7 @@ class MultiheadAttention(nn.Module):
             # A workaround for quantization to work. Otherwise JIT compilation
             # treats bias in linear module as method.
             and not torch.jit.is_scripting()
+            and False # TODO Sehoon change this to selg.quant == 'none'
         ):
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
