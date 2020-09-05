@@ -66,6 +66,9 @@ class MultiheadAttention(nn.Module):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
+        #self.q_act = QuantAct(8, quant_mode='symmetric')
+        self.q_act = QuantAct(8, quant_mode=self.quant_mode)
+
         k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
         v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
         q_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
@@ -200,11 +203,27 @@ class MultiheadAttention(nn.Module):
                     key = value = None
         else:
             saved_state = None
-
+        
         if self.self_attention:
-            q = self.q_proj(query)
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+            query, scale = self.q_act(query)
+
+            '''
+            print('\nQuery')
+            print(query[0])
+            print('\nQuant Query')
+            print(q_quant[0])
+            print('\ndiff')
+            print(query[0] - q_quant[0])
+            print('\nint')
+            print(q_quant / scale)
+            print((q_quant / scale).max())
+            print((q_quant / scale).min())
+            print('************************\n')
+            '''
+
+            q, q_scale_factor = self.q_proj(query, scale)
+            k, k_scale_factor = self.k_proj(query, scale)
+            v, v_scale_factor = self.v_proj(query, scale)
         elif self.encoder_decoder_attention:
             # encoder-decoder attention
             q = self.q_proj(query)
@@ -220,6 +239,7 @@ class MultiheadAttention(nn.Module):
             q = self.q_proj(query)
             k = self.k_proj(key)
             v = self.v_proj(value)
+
         q *= self.scaling
 
         if self.bias_k is not None:
