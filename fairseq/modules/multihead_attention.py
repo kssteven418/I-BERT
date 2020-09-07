@@ -68,6 +68,8 @@ class MultiheadAttention(nn.Module):
 
         #self.q_act = QuantAct(8, quant_mode='symmetric')
         self.q_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.k_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.v_act = QuantAct(8, quant_mode=self.quant_mode)
 
         k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
         v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
@@ -205,40 +207,34 @@ class MultiheadAttention(nn.Module):
             saved_state = None
         
         if self.self_attention:
-            query, scale = self.q_act(query)
+            query, query_scale = self.q_act(query)
 
-            '''
-            print('\nQuery')
-            print(query[0])
-            print('\nQuant Query')
-            print(q_quant[0])
-            print('\ndiff')
-            print(query[0] - q_quant[0])
-            print('\nint')
-            print(q_quant / scale)
-            print((q_quant / scale).max())
-            print((q_quant / scale).min())
-            print('************************\n')
-            '''
+            q, q_scale_factor = self.q_proj(query, query_scale)
+            k, k_scale_factor = self.k_proj(query, query_scale)
+            v, v_scale_factor = self.v_proj(query, query_scale)
 
-            q, q_scale_factor = self.q_proj(query, scale)
-            k, k_scale_factor = self.k_proj(query, scale)
-            v, v_scale_factor = self.v_proj(query, scale)
         elif self.encoder_decoder_attention:
             # encoder-decoder attention
-            q = self.q_proj(query)
+            query, query_scale = self.q_act(query)
+            q, q_scale_factor = self.q_proj(query, query_scale)
             if key is None:
                 assert value is None
                 k = v = None
             else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
+                key, key_scale = self.k_act(key)
+                value, value_scale = self.v_act(value)
+                k, k_scale_factor = self.k_proj(key, key_scale)
+                v, v_scale_factor = self.v_proj(value, value_scale)
 
         else:
             assert key is not None and value is not None
-            q = self.q_proj(query)
-            k = self.k_proj(key)
-            v = self.v_proj(value)
+            query, query_scale = self.q_act(query)
+            key, key_scale = self.k_act(key)
+            value, value_scale = self.v_act(value)
+
+            q, q_scale_factor = self.q_proj(query, query_scale)
+            k, k_scale_factor = self.k_proj(key, key_scale)
+            v, v_scale_factor = self.v_proj(value, value_scale)
 
         q *= self.scaling
 
