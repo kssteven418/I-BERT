@@ -244,6 +244,9 @@ class MultiheadAttention(nn.Module):
             k, k_scale_factor = self.k_proj(key, key_scale)
             v, v_scale_factor = self.v_proj(value, value_scale)
 
+        q, _ = self.q_proj_act(q)
+        k, _ = self.k_proj_act(k)
+        v, _ = self.v_proj_act(v)
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -352,9 +355,7 @@ class MultiheadAttention(nn.Module):
                 )
 
         #print('shape at QK', q.shape, k.transpose(1, 2).shape)
-        q, _ = self.q_proj_act(q)
-        k, _ = self.k_proj_act(k.transpose(1, 2))
-        attn_weights = torch.bmm(q, k)
+        attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -390,7 +391,6 @@ class MultiheadAttention(nn.Module):
 
         assert v is not None
         attn_probs, _ = self.attn_probs_act(attn_probs)
-        v, _ = self.v_proj_act(v)
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
