@@ -66,6 +66,11 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # layer norm associated with the self attention layer
         self.self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
 
+        # TODO(Sehoon): add identity to the activation
+        self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.fc2_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.output_act = QuantAct(8, quant_mode=self.quant_mode)
+
         self.fc1 = self.build_fc1(
             self.embedding_dim,
             ffn_embedding_dim,
