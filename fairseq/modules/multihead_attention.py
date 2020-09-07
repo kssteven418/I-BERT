@@ -82,6 +82,12 @@ class MultiheadAttention(nn.Module):
         self.v_proj = quant_noise(v_proj, q_noise, qn_block_size)
         self.q_proj = quant_noise(q_proj, q_noise, qn_block_size)
 
+        self.q_act_qk = QuantAct(8, quant_mode=self.quant_mode)
+        self.k_act_qk = QuantAct(8, quant_mode=self.quant_mode)
+
+        self.qk_act_qkv = QuantAct(8, quant_mode=self.quant_mode)
+        self.v_act_akv = QuantAct(8, quant_mode=self.quant_mode)
+
         self.out_proj = quant_noise(nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size)
 
         if add_bias_kv:
@@ -343,7 +349,10 @@ class MultiheadAttention(nn.Module):
                     dim=1,
                 )
 
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        #print('shape at QK', q.shape, k.transpose(1, 2).shape)
+        q, _ = self.q_act_qk(q)
+        k, _ = self.k_act_qk(k.transpose(1, 2))
+        attn_weights = torch.bmm(q, k)
         attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -378,6 +387,8 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
+        attn_probs, _ = self.qk_act_qkv(attn_probs)
+        v, _ = self.qk_act_qkv(v)
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
