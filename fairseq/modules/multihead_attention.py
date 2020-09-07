@@ -66,10 +66,9 @@ class MultiheadAttention(nn.Module):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
-        #self.q_act = QuantAct(8, quant_mode='symmetric')
-        self.q_act = QuantAct(8, quant_mode=self.quant_mode)
         self.k_act = QuantAct(8, quant_mode=self.quant_mode)
         self.v_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.q_act = QuantAct(8, quant_mode=self.quant_mode)
 
         k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
         v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
@@ -82,13 +81,16 @@ class MultiheadAttention(nn.Module):
         self.v_proj = quant_noise(v_proj, q_noise, qn_block_size)
         self.q_proj = quant_noise(q_proj, q_noise, qn_block_size)
 
-        self.q_act_qk = QuantAct(8, quant_mode=self.quant_mode)
-        self.k_act_qk = QuantAct(8, quant_mode=self.quant_mode)
+        self.k_proj_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.v_proj_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.q_proj_act = QuantAct(8, quant_mode=self.quant_mode)
 
-        self.qk_act_qkv = QuantAct(8, quant_mode=self.quant_mode)
-        self.v_act_akv = QuantAct(8, quant_mode=self.quant_mode)
+        self.attn_probs_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.attn_act = QuantAct(8, quant_mode=self.quant_mode)
 
-        self.out_proj = quant_noise(nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size)
+        out_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        out_proj.set_param(nn.Linear(embed_dim, embed_dim, bias=bias))
+        self.out_proj = quant_noise(out_proj, q_noise, qn_block_size)
 
         if add_bias_kv:
             self.bias_k = Parameter(torch.Tensor(1, 1, embed_dim))
@@ -242,6 +244,9 @@ class MultiheadAttention(nn.Module):
             k, k_scale_factor = self.k_proj(key, key_scale)
             v, v_scale_factor = self.v_proj(value, value_scale)
 
+        q, _ = self.q_proj_act(q)
+        k, _ = self.k_proj_act(k)
+        v, _ = self.v_proj_act(v)
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -350,9 +355,7 @@ class MultiheadAttention(nn.Module):
                 )
 
         #print('shape at QK', q.shape, k.transpose(1, 2).shape)
-        q, _ = self.q_act_qk(q)
-        k, _ = self.k_act_qk(k.transpose(1, 2))
-        attn_weights = torch.bmm(q, k)
+        attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -387,8 +390,7 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
-        attn_probs, _ = self.qk_act_qkv(attn_probs)
-        v, _ = self.qk_act_qkv(v)
+        attn_probs, _ = self.attn_probs_act(attn_probs)
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
@@ -397,8 +399,12 @@ class MultiheadAttention(nn.Module):
             attn = attn.contiguous().view(tgt_len, bsz, embed_dim)
         else:
             attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
-        attn = self.out_proj(attn)
+
+        attn, attn_scale = self.attn_act(attn)
+        attn, attn_scale = self.out_proj(attn, attn_scale)
+
         attn_weights: Optional[Tensor] = None
+
         if need_weights:
             attn_weights = attn_weights_float.view(
                 bsz, self.num_heads, tgt_len, src_len
