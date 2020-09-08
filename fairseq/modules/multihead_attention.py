@@ -244,9 +244,11 @@ class MultiheadAttention(nn.Module):
             k, k_scale_factor = self.k_proj(key, key_scale)
             v, v_scale_factor = self.v_proj(value, value_scale)
 
+        '''
         q, _ = self.q_proj_act(q)
         k, _ = self.k_proj_act(k)
         v, _ = self.v_proj_act(v)
+        '''
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -390,7 +392,7 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
-        attn_probs, _ = self.attn_probs_act(attn_probs)
+        #attn_probs, _ = self.attn_probs_act(attn_probs)
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:

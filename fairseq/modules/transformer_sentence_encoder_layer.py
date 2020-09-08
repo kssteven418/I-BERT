@@ -88,14 +88,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.final_layer_norm = LayerNorm(self.embedding_dim, export=export)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
-        return quant_noise(
-            nn.Linear(input_dim, output_dim), q_noise, qn_block_size
-        )
+        linear = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        linear.set_param(nn.Linear(input_dim, output_dim))
+        return quant_noise(linear, q_noise, qn_block_size)
 
     def build_fc2(self, input_dim, output_dim, q_noise, qn_block_size):
-        return quant_noise(
-            nn.Linear(input_dim, output_dim), q_noise, qn_block_size
-        )
+        linear = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        linear.set_param(nn.Linear(input_dim, output_dim))
+        return quant_noise(linear, q_noise, qn_block_size)
 
     def build_self_attention(
         self,
@@ -141,9 +141,12 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.self_attn_layer_norm(x)
 
         residual = x
-        x = self.activation_fn(self.fc1(x))
+        x, scale_factor = self.fc1_act(x)
+        x, _ = self.fc1(x, scale_factor)
+        x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
-        x = self.fc2(x)
+        x, scale_factor = self.fc2_act(x)
+        x, _ = self.fc2(x, scale_factor)
         x = self.dropout_module(x)
         x = residual + x
         x = self.final_layer_norm(x)
