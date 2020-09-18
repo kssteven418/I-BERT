@@ -37,9 +37,6 @@ class QuantAct(Module):
         self.register_buffer('x_max', torch.zeros(1))
         self.register_buffer('act_scaling_factor', torch.zeros(1))
 
-        self.pre_weight_scaling_factor = torch.tensor([1.]).cuda()
-        self.identity_weight_scaling_factor = torch.tensor([1.]).cuda()
-
         self.quant_mode = quant_mode
 
         if quant_mode == "none":
@@ -73,10 +70,8 @@ class QuantAct(Module):
 
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
-                pre_weight_scaling_factor=None, 
                 identity=None, 
-                identity_scaling_factor=None, 
-                identity_weight_scaling_factor=None):
+                identity_scaling_factor=None):
         # collect runnng stats
         if self.running_stat:
             if not self.percentile:
@@ -113,7 +108,6 @@ class QuantAct(Module):
                     self.activation_bit, self.x_min, self.x_max, 
                     per_channel=False)
         else:
-            # self.quant_mode == 'asymmetric'
             '''
             self.act_scaling_factor, self.act_zero_point = \
                     asymmetric_linear_quantization_params(self.activation_bit, 
@@ -130,9 +124,11 @@ class QuantAct(Module):
             quant_act_int = self.act_function(x, self.activation_bit, \
                     self.percentile, self.act_scaling_factor)
         else:
-            quant_act_int = fixedpoint_mul.apply(x, self.activation_bit,
-                    self.quant_mode, self.act_scaling_factor, 0,
-                    pre_act_scaling_factor, pre_weight_scaling_factor)
+            quant_act_int = fixedpoint_mul.apply(
+                    x, pre_act_scaling_factor, 
+                    self.activation_bit, self.quant_mode, 
+                    self.act_scaling_factor, 
+                    identity, identity_scaling_factor)
 
         correct_output_scale = self.act_scaling_factor.view(-1)
         return quant_act_int * correct_output_scale, self.act_scaling_factor

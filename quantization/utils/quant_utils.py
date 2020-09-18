@@ -205,9 +205,9 @@ def batch_frexp(inputs):
 
 class fixedpoint_mul(Function):
     @ staticmethod
-    def forward (ctx, z, bit_num, quant_mode, z_scaling_factor, 
-                 case, pre_act_scaling_factor, 
-                 identity=None, identity_scaling_factor=None, identity_weight_scaling_factor=None):
+    def forward (ctx, pre_act, pre_act_scaling_factor, 
+                 bit_num, quant_mode, z_scaling_factor, 
+                 identity=None, identity_scaling_factor=None):
 
         #TODO(Sehoon): May require other type of reshape
         reshape = lambda x : x.view(1, 1, -1)
@@ -219,28 +219,23 @@ class fixedpoint_mul(Function):
 
         with torch.no_grad():
             pre_act_scaling_factor = reshape(pre_act_scaling_factor)
+            if identity is not None:
+                identity_scaling_factor = reshape(identity_scaling_factor)
+
             ctx.z_scaling_factor = z_scaling_factor
             
-            if case == 0:
-                z_int = torch.round(z / pre_act_scaling_factor) 
-                _A = pre_act_scaling_factor.type(torch.double)
-                _B = (_A.type(torch.float)).type(torch.double)
-                _C = (z_scaling_factor.type(torch.float)).type(torch.double)
-                new_scale = _B / _C
+            z_int = torch.round(pre_act / pre_act_scaling_factor) 
+            _A = pre_act_scaling_factor.type(torch.double)
+            _B = (z_scaling_factor.type(torch.float)).type(torch.double)
+            new_scale = _A / _B
+            new_scale = reshape(new_scale)
 
-                new_scale = reshape(new_scale)
+            m, e = batch_frexp(new_scale)
 
-                m, e = batch_frexp(new_scale)
+            output = z_int.type(torch.double) * m.type(torch.double)
+            output = torch.round( output / (2.0**e) )
 
-                output = z_int.type(torch.double) * m.type(torch.double)
-                output = torch.round( output / (2.0**e) )
-
-                '''
-                print(z_int[0])
-                print(output[0])
-                print(output.max(axis=0).values.max())
-                '''
-
+            if identity is None: 
                 if bit_num == 4 or bit_num == 8:
                     if quant_mode == 'symmetric':
                         return torch.clamp( output.type(torch.float), -n - 1, n)
@@ -249,8 +244,23 @@ class fixedpoint_mul(Function):
                 else:
                     return output.type(torch.float)
 
+            else:
+                # needs addition of identity activation
+                wx_int = torch.round(identity / identity_scaling_factor)
+
+                _A = identity_scaling_factor.type(torch.double)
+                _B = (z_scaling_factor.type(torch.float)).type(torch.double)
+                new_scale = _A / _B
+                new_scale = reshape(new_scale)
+
+                m1, e1 = batch_frexp(new_scale)
+                output1 = wx_int.type(torch.double) * m1.type(torch.double)
+                output1 = torch.round(output1 / (2.0**e1))
+
+                return (output1 + output).type(torch.float)
+
     @ staticmethod
     def backward(ctx, grad_output):
 
-        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, None, \
+        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, \
                 None, None, None, None

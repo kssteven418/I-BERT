@@ -150,8 +150,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # 1st LN
         x, x_scaler_factor = self.pre_self_attn_layer_norn_act(
+                x, x_scale_factor,
+                identity=residual,
+                identity_scaling_factor=residual_scale_factor)
+        '''
+        x, x_scaler_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scale_factor)
-        x = residual + x #TODO(Sehoon): merge with the activation
+        x = x + residual
+        '''
         x = self.self_attn_layer_norm(x)
 
         residual = x
