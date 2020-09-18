@@ -53,6 +53,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # Initialize blocks
         self.activation_fn = utils.get_activation_fn(activation_fn)
+
+        self.input_act = QuantAct(8, quant_mode=self.quant_mode)
+
         self.self_attn = self.build_self_attention(
             self.embedding_dim,
             num_attention_heads,
@@ -115,6 +118,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             q_noise=q_noise,
             qn_block_size=qn_block_size,
             quant_mode=quant_mode,
+            return_output_scale=True,
         )
 
     def forward(
@@ -127,11 +131,15 @@ class TransformerSentenceEncoderLayer(nn.Module):
         LayerNorm is applied either before or after the self-attention/ffn
         modules similar to the original Transformer implementation.
         """
-        residual = x
-        x, attn = self.self_attn(
+        x, x_scale_factor = self.input_act(x)
+        residual, residual_scale_factor = x, x_scale_factor
+        x, x_scale_factor, attn = self.self_attn(
             query=x,
             key=x,
             value=x,
+            query_scale=x_scale_factor,
+            key_scale=x_scale_factor,
+            value_scale=x_scale_factor,
             key_padding_mask=self_attn_padding_mask,
             need_weights=False,
             attn_mask=self_attn_mask,

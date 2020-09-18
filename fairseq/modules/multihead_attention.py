@@ -40,6 +40,7 @@ class MultiheadAttention(nn.Module):
         q_noise=0.0,
         qn_block_size=8,
         quant_mode='none',
+        return_output_scale=False,
     ):
         super().__init__()
         self.quant_mode = quant_mode
@@ -65,10 +66,6 @@ class MultiheadAttention(nn.Module):
         assert not self.self_attention or self.qkv_same_dim, (
             "Self-attention requires query, key and " "value to be of the same size"
         )
-
-        self.k_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.v_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.q_act = QuantAct(8, quant_mode=self.quant_mode)
 
         k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
         v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
@@ -104,6 +101,7 @@ class MultiheadAttention(nn.Module):
 
         self.onnx_trace = False
         self.tpu = False
+        self.return_output_scale = return_output_scale
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -143,6 +141,9 @@ class MultiheadAttention(nn.Module):
         attn_mask: Optional[Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
+        query_scale = None,
+        key_scale = None,
+        value_scale = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -215,30 +216,22 @@ class MultiheadAttention(nn.Module):
             saved_state = None
         
         if self.self_attention:
-            query, query_scale = self.q_act(query)
-
             q, q_scale_factor = self.q_proj(query, query_scale)
             k, k_scale_factor = self.k_proj(query, query_scale)
             v, v_scale_factor = self.v_proj(query, query_scale)
 
         elif self.encoder_decoder_attention:
             # encoder-decoder attention
-            query, query_scale = self.q_act(query)
             q, q_scale_factor = self.q_proj(query, query_scale)
             if key is None:
                 assert value is None
                 k = v = None
             else:
-                key, key_scale = self.k_act(key)
-                value, value_scale = self.v_act(value)
                 k, k_scale_factor = self.k_proj(key, key_scale)
                 v, v_scale_factor = self.v_proj(value, value_scale)
 
         else:
             assert key is not None and value is not None
-            query, query_scale = self.q_act(query)
-            key, key_scale = self.k_act(key)
-            value, value_scale = self.v_act(value)
 
             q, q_scale_factor = self.q_proj(query, query_scale)
             k, k_scale_factor = self.k_proj(key, key_scale)
@@ -413,7 +406,10 @@ class MultiheadAttention(nn.Module):
                 # average attention weights over heads
                 attn_weights = attn_weights.mean(dim=0)
 
-        return attn, attn_weights
+        if not self.return_output_scale:
+            # For compatibility of original codes
+            return attn, attn_weights
+        return attn, attn_scale, attn_weights
 
     @staticmethod
     def _append_prev_key_padding_mask(
