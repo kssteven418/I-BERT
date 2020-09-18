@@ -176,3 +176,81 @@ class SymmetricQuantFunction(Function):
             scale = scale.view(-1)
 
         return grad_output.clone() / scale, None, None, None, None
+
+# z = w * x
+# inputs alpha_x * alpha_w / alpha_z
+def batch_frexp(inputs):
+    #
+    shape_of_input = inputs.size()
+
+    # trans the input to be a 1-d tensor
+    inputs = inputs.view(-1)
+    
+    output_m, output_e = np.frexp(inputs.cpu().numpy())
+    # print(output_m * (2 ** 31))
+    # output_m = np.round( output_m * (2 ** 31) )
+    tmp_m = []
+    for m in output_m:
+        int_m_shifted = int(Decimal(m * (2**31)).quantize(Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+        tmp_m.append(int_m_shifted)
+    output_m = np.array(tmp_m)
+    # output_m = np.array(np.round( np.float64(output_m) * (2 ** 31)))
+
+    # inputs = [output_m*2^32] * 2^output_e / 2^32
+    # output_e = np.round(output_e - 31)
+    output_e = 31. - output_e
+
+    return torch.from_numpy( output_m ).cuda().view(shape_of_input), \
+           torch.from_numpy( output_e ).cuda().view(shape_of_input)
+
+class fixedpoint_mul(Function):
+    @ staticmethod
+    def forward (ctx, z, bit_num, quant_mode, z_scaling_factor, 
+                 case, pre_act_scaling_factor, 
+                 identity=None, identity_scaling_factor=None, identity_weight_scaling_factor=None):
+
+        #TODO(Sehoon): May require other type of reshape
+        reshape = lambda x : x.view(1, 1, -1)
+
+        if quant_mode == 'symmetric':
+            n = 2 ** (bit_num - 1) - 1
+        else:
+            n = 2 ** bit_num - 1
+
+        with torch.no_grad():
+            pre_act_scaling_factor = reshape(pre_act_scaling_factor)
+            ctx.z_scaling_factor = z_scaling_factor
+            
+            if case == 0:
+                z_int = torch.round(z / pre_act_scaling_factor) 
+                _A = pre_act_scaling_factor.type(torch.double)
+                _B = (_A.type(torch.float)).type(torch.double)
+                _C = (z_scaling_factor.type(torch.float)).type(torch.double)
+                new_scale = _B / _C
+
+                new_scale = reshape(new_scale)
+
+                m, e = batch_frexp(new_scale)
+
+                output = z_int.type(torch.double) * m.type(torch.double)
+                output = torch.round( output / (2.0**e) )
+
+                '''
+                print(z_int[0])
+                print(output[0])
+                print(output.max(axis=0).values.max())
+                '''
+
+                if bit_num == 4 or bit_num == 8:
+                    if quant_mode == 'symmetric':
+                        return torch.clamp( output.type(torch.float), -n - 1, n)
+                    else:
+                        return torch.clamp( output.type(torch.float), 0, n)
+                else:
+                    return output.type(torch.float)
+
+    @ staticmethod
+    def backward(ctx, grad_output):
+
+        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, None, \
+                None, None, None, None

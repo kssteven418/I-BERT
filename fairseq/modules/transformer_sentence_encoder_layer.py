@@ -66,10 +66,12 @@ class TransformerSentenceEncoderLayer(nn.Module):
             quant_mode=quant_mode,
         )
 
+        # TODO(Sehoon): proper output bit? 32 or 8
+        self.pre_self_attn_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
+
         # layer norm associated with the self attention layer
         self.self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
 
-        # TODO(Sehoon): add identity to the activation
         self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
         self.fc2_act = QuantAct(8, quant_mode=self.quant_mode)
         self.output_act = QuantAct(8, quant_mode=self.quant_mode)
@@ -145,7 +147,11 @@ class TransformerSentenceEncoderLayer(nn.Module):
             attn_mask=self_attn_mask,
         )
         x = self.dropout_module(x)
-        x = residual + x
+
+        # 1st LN
+        x, x_scaler_factor = self.pre_self_attn_layer_norn_act(
+                x, x_scale_factor)
+        x = residual + x #TODO(Sehoon): merge with the activation
         x = self.self_attn_layer_norm(x)
 
         residual = x

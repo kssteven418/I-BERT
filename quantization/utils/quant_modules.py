@@ -130,7 +130,9 @@ class QuantAct(Module):
             quant_act_int = self.act_function(x, self.activation_bit, \
                     self.percentile, self.act_scaling_factor)
         else:
-            raise NotImplementedError
+            quant_act_int = fixedpoint_mul.apply(x, self.activation_bit,
+                    self.quant_mode, self.act_scaling_factor, 0,
+                    pre_act_scaling_factor, pre_weight_scaling_factor)
 
         correct_output_scale = self.act_scaling_factor.view(-1)
         return quant_act_int * correct_output_scale, self.act_scaling_factor
