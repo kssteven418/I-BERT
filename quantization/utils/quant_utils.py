@@ -211,6 +211,7 @@ class fixedpoint_mul(Function):
 
         #TODO(Sehoon): May require other type of reshape
         reshape = lambda x : x.view(1, 1, -1)
+        ctx.identity = identity
 
         if quant_mode == 'symmetric':
             n = 2 ** (bit_num - 1) - 1
@@ -235,16 +236,7 @@ class fixedpoint_mul(Function):
             output = z_int.type(torch.double) * m.type(torch.double)
             output = torch.round( output / (2.0**e) )
 
-            if identity is None: 
-                if bit_num == 4 or bit_num == 8:
-                    if quant_mode == 'symmetric':
-                        return torch.clamp( output.type(torch.float), -n - 1, n)
-                    else:
-                        return torch.clamp( output.type(torch.float), 0, n)
-                else:
-                    return output.type(torch.float)
-
-            else:
+            if identity is not None:
                 # needs addition of identity activation
                 wx_int = torch.round(identity / identity_scaling_factor)
 
@@ -257,10 +249,21 @@ class fixedpoint_mul(Function):
                 output1 = wx_int.type(torch.double) * m1.type(torch.double)
                 output1 = torch.round(output1 / (2.0**e1))
 
-                return (output1 + output).type(torch.float)
+                output = output1 + output
+
+            if bit_num == 4 or bit_num == 8:
+                if quant_mode == 'symmetric':
+                    return torch.clamp( output.type(torch.float), -n - 1, n)
+                else:
+                    return torch.clamp( output.type(torch.float), 0, n)
+            else:
+                return output.type(torch.float)
+
 
     @ staticmethod
     def backward(ctx, grad_output):
-
-        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, \
-                None, None, None, None
+        identity_grad = None
+        if ctx.identity is not None:
+            identity_grad = grad_output.clone() / ctx.z_scaling_factor
+        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, None,\
+                identity_grad, None

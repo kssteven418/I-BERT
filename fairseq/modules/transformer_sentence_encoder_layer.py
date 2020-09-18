@@ -165,9 +165,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x, _ = self.fc1(x, scale_factor)
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
-        x, scale_factor = self.fc2_act(x)
+        x, scale_factor = self.fc2_act(x) #TODO
         x, _ = self.fc2(x, scale_factor)
         x = self.dropout_module(x)
-        x = residual + x
+        x = residual + x #TODO
         x = self.final_layer_norm(x)
         return x, attn
