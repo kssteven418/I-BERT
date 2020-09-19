@@ -100,6 +100,8 @@ class QuantAct(Module):
                         x_max * (1 - self.act_range_momentum)
 
         if self.quant_mode == 'none':
+            if identity is not None:
+                return x + identity, None
             return x, None
 
         # scaling factor and zero point(if necessary) of the activation outputs
