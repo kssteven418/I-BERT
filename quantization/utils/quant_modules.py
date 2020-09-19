@@ -283,17 +283,22 @@ class QuantLayerNorm(Module):
         #self.ln = ln
 
     def forward(self, x, scaling_factor=None):
-        if self.quant_mode == 'none':
+        '''
+        if self.quant_mode == 'symmetric':
+            x_int = x / scaling_factor
+            mean_int = torch.round(x_int.mean(axis=2, keepdim=True))
+            y_int = x_int - mean_int
+            var_int = torch.mean(y_int ** 2, axis=2, keepdim=True)
+            std_int = torch.round(torch.sqrt(var_int))
+        '''
+        #if self.quant_mode == 'none':
+        if True:
             mean = x.mean(axis=2, keepdim=True)
-            var = torch.mean((x - mean) ** 2, axis=2, keepdim=True)
-            x = (x - mean) / torch.sqrt(self.eps + var)
+            y = x - mean
+            var = torch.mean(y ** 2, axis=2, keepdim=True)
+            x = y / torch.sqrt(self.eps + var)
             x = x * self.weight + self.bias
-            #print(x[0])
             return x
-            #return self.ln(x)
-        else:
-            return self.ln(x)
-            raise NotImplementedError
 
 
 class QuantLinearWrapper(Module):

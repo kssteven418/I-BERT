@@ -154,7 +154,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # 1st LN
-        x, x_scaler_factor = self.pre_self_attn_layer_norn_act(
+        x, x_scale_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scale_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
@@ -171,7 +171,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = y
         '''
 
-        x = self.self_attn_layer_norm(x)
+        x = self.self_attn_layer_norm(x, x_scale_factor)
 
         x, scale_factor = self.fc1_act(x)
         residual, residual_scale_factor = x, scale_factor
@@ -186,5 +186,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 x, x_scale_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
-        x = self.final_layer_norm(x)
+
+        x = self.final_layer_norm(x, x_scale_factor)
         return x, attn
