@@ -10,6 +10,7 @@ from torch.nn import Embedding as _Embedding
 from torch.nn import Module, Parameter
 from .quant_utils import *
 
+from fairseq.modules import LayerNorm
 
 # The input quantization needs to use symmetric quantization!
 class QuantAct(Module):
@@ -263,6 +264,36 @@ class QuantLinear(Module):
 
         return F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) \
                 * bias_scaling_factor, bias_scaling_factor
+
+class QuantLayerNorm(Module):
+    def __init__(self,
+                 weight_bit,
+                 bias_bit,
+                 quant_mode='none'):
+        super(QuantLayerNorm, self).__init__()
+        self.quant_mode = quant_mode
+        self.weight_bit = weight_bit
+        self.bias_bit = bias_bit
+
+    def set_param(self, ln):
+        self.normalized_shape = ln.normalized_shape
+        self.eps = ln.eps
+        self.weight = Parameter(ln.weight.data.clone())
+        self.bias = Parameter(ln.bias.data.clone())
+        #self.ln = ln
+
+    def forward(self, x, scaling_factor=None):
+        if self.quant_mode == 'none':
+            mean = x.mean(axis=2, keepdim=True)
+            x = x - mean
+            var = torch.mean(x ** 2, axis=2, keepdim=True)
+            x = x / torch.sqrt(self.eps + var)
+            x = x * self.weight + self.bias
+            return x
+            #return self.ln(x)
+        else:
+            return self.ln(x)
+            raise NotImplementedError
 
 
 class QuantLinearWrapper(Module):
