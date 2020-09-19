@@ -89,6 +89,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             qn_block_size=qn_block_size,
         )
 
+        self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
         # layer norm associated with the position wise feed-forward NN
         self.final_layer_norm = LayerNorm(self.embedding_dim, export=export)
 
@@ -153,21 +154,20 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 x, x_scale_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
-        '''
-        x, x_scaler_factor = self.pre_self_attn_layer_norn_act(
-                x, x_scale_factor)
-        x = x + residual
-        '''
         x = self.self_attn_layer_norm(x)
 
-        residual = x
         x, scale_factor = self.fc1_act(x)
+        residual, residual_scale_factor = x, scale_factor
+
         x, _ = self.fc1(x, scale_factor)
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
         x, scale_factor = self.fc2_act(x) #TODO
-        x, _ = self.fc2(x, scale_factor)
+        x, x_scale_factor = self.fc2(x, scale_factor)
         x = self.dropout_module(x)
-        x = residual + x #TODO
+        x, x_scaler_factor = self.pre_final_layer_norn_act(
+                x, x_scale_factor,
+                identity=residual,
+                identity_scaling_factor=residual_scale_factor)
         x = self.final_layer_norm(x)
         return x, attn
