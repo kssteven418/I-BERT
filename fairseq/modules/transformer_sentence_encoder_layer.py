@@ -70,9 +70,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.pre_self_attn_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
 
         # layer norm associated with the self attention layer
-        self.self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        #self.self_attn_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
-        #self.self_attn_layer_norm.set_param(self_attn_layer_norm)
+        self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
+        self.self_attn_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
+        self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
         self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
         self.fc2_act = QuantAct(8, quant_mode=self.quant_mode)
@@ -93,9 +93,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
         # layer norm associated with the position wise feed-forward NN
-        self.final_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        #self.final_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
-        #self.final_layer_norm.set_param(final_layer_norm)
+        final_layer_norm = LayerNorm(self.embedding_dim, export=export)
+        self.final_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
+        self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
         linear = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
@@ -159,21 +159,19 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
 
-        '''
         # Check LN
+        '''
         bias = self.self_attn_layer_norm.bias
         weight = self.self_attn_layer_norm.weight
         mean = x.mean(axis=2, keepdim=True)
         var = torch.mean((x-mean)**2, axis=2, keepdim=True)
         y = (x-mean) / torch.sqrt(var + 1e-5)
         y = y * weight + bias
-        #print(y[0])
+
+        x = y
         '''
 
         x = self.self_attn_layer_norm(x)
-        #print(x[0])
-        #print(y[0])
-
 
         x, scale_factor = self.fc1_act(x)
         residual, residual_scale_factor = x, scale_factor

@@ -285,10 +285,10 @@ class QuantLayerNorm(Module):
     def forward(self, x, scaling_factor=None):
         if self.quant_mode == 'none':
             mean = x.mean(axis=2, keepdim=True)
-            x = x - mean
-            var = torch.mean(x ** 2, axis=2, keepdim=True)
-            x = x / torch.sqrt(self.eps + var)
+            var = torch.mean((x - mean) ** 2, axis=2, keepdim=True)
+            x = (x - mean) / torch.sqrt(self.eps + var)
             x = x * self.weight + self.bias
+            #print(x[0])
             return x
             #return self.ln(x)
         else:
