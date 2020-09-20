@@ -40,9 +40,11 @@ class MultiheadAttention(nn.Module):
         q_noise=0.0,
         qn_block_size=8,
         quant_mode='none',
-        return_output_scale=False,
+        number=0,
     ):
         super().__init__()
+        self.number = number
+        self.counting = 0
         self.quant_mode = quant_mode
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim

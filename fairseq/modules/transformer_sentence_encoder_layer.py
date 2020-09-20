@@ -187,5 +187,12 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
 
+        if self.number == 8:
+            print(x[32][0][585:890])
         x = self.final_layer_norm(x, x_scale_factor)
+        if self.number == 8:
+            print(x[32][0][585:890])
+            print(self.final_layer_norm.weight[585:590])
+            print(self.final_layer_norm.bias[585:590])
+            raise Exception
         return x, attn
