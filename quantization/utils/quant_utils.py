@@ -179,7 +179,7 @@ class SymmetricQuantFunction(Function):
 
 # z = w * x
 # inputs alpha_x * alpha_w / alpha_z
-def batch_frexp(inputs):
+def batch_frexp(inputs, max_bit=31):
     #
     shape_of_input = inputs.size()
 
@@ -191,14 +191,15 @@ def batch_frexp(inputs):
     # output_m = np.round( output_m * (2 ** 31) )
     tmp_m = []
     for m in output_m:
-        int_m_shifted = int(Decimal(m * (2**31)).quantize(Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+        int_m_shifted = int(Decimal(m * (2**max_bit)).quantize(Decimal('1'), 
+                                                               rounding=decimal.ROUND_HALF_UP))
         tmp_m.append(int_m_shifted)
     output_m = np.array(tmp_m)
     # output_m = np.array(np.round( np.float64(output_m) * (2 ** 31)))
 
     # inputs = [output_m*2^32] * 2^output_e / 2^32
     # output_e = np.round(output_e - 31)
-    output_e = 31. - output_e
+    output_e = float(max_bit) - output_e
 
     return torch.from_numpy( output_m ).cuda().view(shape_of_input), \
            torch.from_numpy( output_e ).cuda().view(shape_of_input)
@@ -251,7 +252,7 @@ class fixedpoint_mul(Function):
 
                 output = output1 + output
 
-            if bit_num == 4 or bit_num == 8:
+            if bit_num in [4, 8, 16]:
                 if quant_mode == 'symmetric':
                     return torch.clamp( output.type(torch.float), -n - 1, n)
                 else:

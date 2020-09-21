@@ -173,7 +173,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         '''
 
         x_int = x / x_scale_factor
-        print('LN1', float(x_int.min()), float(x_int.max()))
         x = self.self_attn_layer_norm(x, x_scale_factor)
 
         x, x_scale_factor = self.fc1_act(x, x_scale_factor)
@@ -185,7 +184,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x, x_scale_factor = self.fc2_act(x, x_scale_factor) #TODO
         x, x_scale_factor = self.fc2(x, x_scale_factor)
         x = self.dropout_module(x)
-        x, x_scaler_factor = self.pre_final_layer_norn_act(
+        x, x_scale_factor = self.pre_final_layer_norn_act(
                 x, x_scale_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
@@ -193,7 +192,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         #if self.number == 8:
         #    print(x[24][1][585:590])
         x_int = x / x_scale_factor
-        print('LN2', float(x_int.min()), float(x_int.max()))
         x = self.final_layer_norm(x, x_scale_factor)
         #if self.number == 8:
         #    print('----')

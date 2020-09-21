@@ -76,15 +76,16 @@ class QuantAct(Module):
                 specified_min=None,
                 specified_max=None):
         # collect runnng stats
+        x_act = x if identity is None else identity + x
         if self.running_stat:
             if not self.percentile:
-                x_min = x.data.min()
-                x_max = x.data.max()
+                x_min = x_act.data.min()
+                x_max = x_act.data.max()
             elif self.quant_mode == 'symmetric':
-                x_min, x_max = get_percentile_min_max(x.detach().view(-1), 
+                x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
                                 0.1, self.percentage, output_tensor=True)
             elif self.quant_mode == 'asymmetric':
-                x_min, x_max = get_percentile_min_max(x.detach().view(-1), 
+                x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
                                 0, self.percentage, output_tensor=True)
             # Initialization
             if self.x_min == self.x_max:
@@ -103,9 +104,7 @@ class QuantAct(Module):
                         x_max * (1 - self.act_range_momentum)
 
         if self.quant_mode == 'none':
-            if identity is not None:
-                return x + identity, None
-            return x, None
+            return x_act, None
         
         x_min = self.x_min if specified_min is None else specified_min
         x_max = self.x_max if specified_max is None else specified_max
@@ -291,10 +290,10 @@ class QuantLayerNorm(Module):
             x_int = x / scaling_factor
             mean_int = torch.round(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
-            print('y-max', y_int.abs().max())
             y_sq_int = y_int ** 2
-            print('y-sq-max', y_sq_int.max())
-            assert y_sq_int.max() < 2 ** 31 
+            assert y_sq_int.max() < 2 ** 31:
+
+
             var_int = torch.mean(y_int ** 2, axis=2, keepdim=True)
             std_int = torch.round(torch.sqrt(var_int))
             new_scale_factor = 1 / std_int
