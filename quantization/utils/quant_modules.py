@@ -223,15 +223,9 @@ class QuantLinear(Module):
         if self.per_channel:
             w_min, _ = torch.min(w_transform, dim=1, out=None)
             w_max, _ = torch.max(w_transform, dim=1, out=None)
-            if self.quantize_bias:
-                b_min = self.bias.data
-                b_max = self.bias.data
         else:
             w_min = w_transform.min().expand(1)
             w_max = w_transform.max().expand(1)
-            if self.quantize_bias:
-                b_min = self.bias.data.min()
-                b_max = self.bias.data.max()
 
         # we need to add asymmetric here later, for now just ignore it
         if self.quant_mode == 'symmetric':
@@ -278,6 +272,8 @@ class QuantLayerNorm(Module):
         self.weight_bit = weight_bit
         self.bias_bit = bias_bit
 
+        self.activation = QuantAct(8, quant_mode=self.quant_mode)
+
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
         self.eps = ln.eps
@@ -308,10 +304,11 @@ class QuantLayerNorm(Module):
             x_int = x / scaling_factor
 
             '''
+            # using sum instead of mean
             sum_int = x_int.sum(axis=2, keepdim=True)
             y_int = n * x_int - sum_int
-            y_int = y_int / 2**5
-            scale_factor = 2**5 / n
+            y_int = round_ste.apply(y_int / 2**10)
+            scale_factor = 2**10 / n
             '''
 
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
@@ -321,11 +318,13 @@ class QuantLayerNorm(Module):
 
             y_sq_int = y_sq_int >> 10
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            assert var_int.max() < 2**31
+            assert var_int.max() < 2 ** 31
             scale_factor = 1 / torch.sqrt(var_int) # cast to float
-            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / 2**5
-
+            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / 2 ** 5
             x = y_int * scale_factor
+            # requantize here?
+            #x, scale_factor = self.activation(x, scale_factor)
+
             #print((new_scale_factor * y_int)[0][0][0:10])
             x = x * self.weight + self.bias
             return x

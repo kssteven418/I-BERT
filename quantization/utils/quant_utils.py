@@ -219,7 +219,10 @@ class fixedpoint_mul(Function):
                  identity=None, identity_scaling_factor=None):
 
         #TODO(Sehoon): May require other type of reshape
-        reshape = lambda x : x.view(1, 1, -1)
+        if len(pre_act_scaling_factor.shape) == 3:
+            reshape = lambda x : x
+        else:
+            reshape = lambda x : x.view(1, 1, -1)
         ctx.identity = identity
 
         if quant_mode == 'symmetric':
