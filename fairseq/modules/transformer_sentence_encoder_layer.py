@@ -78,7 +78,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
         self.fc2_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.output_act = QuantAct(8, quant_mode=self.quant_mode)
 
         self.fc1 = self.build_fc1(
             self.embedding_dim,
@@ -175,26 +174,27 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         x = self.self_attn_layer_norm(x, x_scale_factor)
 
-        x, scale_factor = self.fc1_act(x)
-        residual, residual_scale_factor = x, scale_factor
+        x, x_scale_factor = self.fc1_act(x, x_scale_factor)
+        residual, residual_scale_factor = x, x_scale_factor
 
-        x, _ = self.fc1(x, scale_factor)
+        x, x_scale_factor = self.fc1(x, x_scale_factor)
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
-        x, scale_factor = self.fc2_act(x) #TODO
-        x, x_scale_factor = self.fc2(x, scale_factor)
+        x, x_scale_factor = self.fc2_act(x, x_scale_factor) #TODO
+        x, x_scale_factor = self.fc2(x, x_scale_factor)
         x = self.dropout_module(x)
         x, x_scaler_factor = self.pre_final_layer_norn_act(
                 x, x_scale_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scale_factor)
 
-        if self.number == 8:
-            print(x[32][0][585:890])
+        #if self.number == 8:
+        #    print(x[24][1][585:590])
         x = self.final_layer_norm(x, x_scale_factor)
-        if self.number == 8:
-            print(x[32][0][585:890])
-            print(self.final_layer_norm.weight[585:590])
-            print(self.final_layer_norm.bias[585:590])
-            raise Exception
+        #if self.number == 8:
+        #    print('----')
+        #    print(x[24][1][585:590])
+        #    print(self.final_layer_norm.weight[585:590])
+        #    print(self.final_layer_norm.bias[585:590])
+        #    raise Exception
         return x, attn
