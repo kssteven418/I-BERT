@@ -47,6 +47,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.quant_mode = quant_mode
         self.number = number
+        self.ln_output_bit = 16
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -73,7 +74,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.self_attn_layer_norm = QuantLayerNorm(16, quant_mode=self.quant_mode)
+        self.self_attn_layer_norm = QuantLayerNorm(self.ln_output_bit, 
+                                                   quant_mode=self.quant_mode)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
         self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
@@ -95,7 +97,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.final_layer_norm = QuantLayerNorm(16, quant_mode=self.quant_mode)
+        self.final_layer_norm = QuantLayerNorm(self.ln_output_bit, 
+                                               quant_mode=self.quant_mode)
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
@@ -139,15 +142,15 @@ class TransformerSentenceEncoderLayer(nn.Module):
         LayerNorm is applied either before or after the self-attention/ffn
         modules similar to the original Transformer implementation.
         """
-        x, x_scale_factor = self.input_act(x)
-        residual, residual_scale_factor = x, x_scale_factor
-        x, x_scale_factor, attn = self.self_attn(
+        x, x_scaling_factor = self.input_act(x)
+        residual, residual_scaling_factor = x, x_scaling_factor
+        x, x_scaling_factor, attn = self.self_attn(
             query=x,
             key=x,
             value=x,
-            query_scale=x_scale_factor,
-            key_scale=x_scale_factor,
-            value_scale=x_scale_factor,
+            query_scale=x_scaling_factor,
+            key_scale=x_scaling_factor,
+            value_scale=x_scaling_factor,
             key_padding_mask=self_attn_padding_mask,
             need_weights=False,
             attn_mask=self_attn_mask,
@@ -155,10 +158,10 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # 1st LN
-        x, x_scale_factor = self.pre_self_attn_layer_norn_act(
-                x, x_scale_factor,
+        x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
+                x, x_scaling_factor,
                 identity=residual,
-                identity_scaling_factor=residual_scale_factor)
+                identity_scaling_factor=residual_scaling_factor)
 
         # Check LN
         '''
@@ -172,27 +175,27 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = y
         '''
 
-        x_int = x / x_scale_factor
-        x, x_scale_factor = self.self_attn_layer_norm(x, x_scale_factor)
+        x_int = x / x_scaling_factor
+        x, x_scaling_factor = self.self_attn_layer_norm(x, x_scaling_factor)
 
-        x, x_scale_factor = self.fc1_act(x, x_scale_factor)
-        residual, residual_scale_factor = x, x_scale_factor
+        x, x_scaling_factor = self.fc1_act(x, x_scaling_factor)
+        residual, residual_scaling_factor = x, x_scaling_factor
 
-        x, x_scale_factor = self.fc1(x, x_scale_factor) #TODO required?
+        x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
-        x, x_scale_factor = self.fc2_act(x, x_scale_factor) #TODO
-        x, x_scale_factor = self.fc2(x, x_scale_factor)
+        x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) #TODO
+        x, x_scaling_factor = self.fc2(x, x_scaling_factor)
         x = self.dropout_module(x)
-        x, x_scale_factor = self.pre_final_layer_norn_act(
-                x, x_scale_factor,
+        x, x_scaling_factor = self.pre_final_layer_norn_act(
+                x, x_scaling_factor,
                 identity=residual,
-                identity_scaling_factor=residual_scale_factor)
+                identity_scaling_factor=residual_scaling_factor)
 
         #if self.number == 8:
         #    print(x[24][1][585:590])
-        x_int = x / x_scale_factor
-        x, x_scale_factor = self.final_layer_norm(x, x_scale_factor)
+        x_int = x / x_scaling_factor
+        x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
         #if self.number == 8:
         #    print('----')
         #    print(x[24][1][585:590])

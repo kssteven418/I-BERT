@@ -8,12 +8,12 @@ import decimal
 from decimal import Decimal
 import time
 
-def bmm_wrapper(input1, scale_factor1, input2, scale_factor2):
-    input_int1 = input1 / scale_factor1
-    input_int2 = input2 / scale_factor2
+def bmm_wrapper(input1, scaling_factor1, input2, scaling_factor2):
+    input_int1 = input1 / scaling_factor1
+    input_int2 = input2 / scaling_factor2
     output_int =torch.bmm(input_int1, input_int2)
-    output_scale_factor = scale_factor1 * scale_factor2
-    return output_int * output_scale_factor, output_scale_factor
+    output_scaling_factor = scaling_factor1 * scaling_factor2
+    return output_int * output_scaling_factor, output_scaling_factor
 
 
 def get_percentile_min_max(input, lower_percentile, upper_percentile, output_tensor=False):

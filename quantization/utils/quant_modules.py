@@ -306,7 +306,7 @@ class QuantLayerNorm(Module):
             sum_int = x_int.sum(axis=2, keepdim=True)
             y_int = n * x_int - sum_int
             y_int = round_ste.apply(y_int / 2**10)
-            scale_factor = 2**10 / n
+            scaling_factor = 2**10 / n
             '''
 
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
@@ -318,24 +318,24 @@ class QuantLayerNorm(Module):
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
             assert var_int.max() < 2 ** 31
 
-            scale_factor = 1 / torch.sqrt(var_int) # cast to float
-            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / (2 ** self.shift)
-            x = y_int * scale_factor
+            scaling_factor = 1 / torch.sqrt(var_int) # cast to float
+            scaling_factor = scaling_factor * torch.sqrt(n) / (2 ** self.shift)
+            x = y_int * scaling_factor
 
             if self.quant_mode == 'symmetric':
                 bias = self.bias.data.detach() / self.weight.data.detach()
-                bias_scale_factor = bias.clone() # bias_int == torch.ones_like(bias)
+                bias_scaling_factor = bias.clone() # bias_int == torch.ones_like(bias)
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
             # requantize here?
-            x, scale_factor = self.activation(x, scale_factor,
+            x, scaling_factor = self.activation(x, scaling_factor,
                                identity=bias,
-                               identity_scaling_factor=bias_scale_factor)
+                               identity_scaling_factor=bias_scaling_factor)
 
-            #x = x * self.weight + bias * bias_scale_factor * self.weight
-            #x += bias * bias_scale_factor
+            #x = x * self.weight + bias * bias_scaling_factor * self.weight
+            #x += bias * bias_scaling_factor
             x = x * self.weight
-            return x, scale_factor
+            return x, scaling_factor
 
 
 class QuantLinearWrapper(Module):
@@ -363,8 +363,8 @@ class QuantLinearWrapper(Module):
 
     def forward(self, x):
         if self.quant_mode == 'symmetric':
-            x, scale_factor = self.prev_act(x)
-            x, scale_factor = self.linear(x, scale_factor)
+            x, scaling_factor = self.prev_act(x)
+            x, scaling_factor = self.linear(x, scaling_factor)
             return x
         else:
             raise NotImplementedError
