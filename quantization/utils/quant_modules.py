@@ -286,36 +286,57 @@ class QuantLayerNorm(Module):
         #self.ln = ln
 
     def forward(self, x, scaling_factor=None):
+        x_backup = x
+        #print('-----')
+        #print(x[24][1][585:590])
+        mean = x.mean(axis=2, keepdim=True)
+        y = x - mean
+        #print(y[24][1][585:590])
+        var = torch.mean(y ** 2, axis=2, keepdim=True)
+        x = y / torch.sqrt(self.eps + var)
+        #print(torch.sqrt(self.eps + var)[24][1])
+        #print(x[24][1][585:590])
+        x = x * self.weight + self.bias
+        #print(x[24][1][585:590])
+        #print('-----')
+        if self.quant_mode == 'none':
+            return x
+
         if self.quant_mode == 'symmetric':
+            x = x_backup
             x_int = x / scaling_factor
+            n = float(x.shape[2])
             mean_int = torch.round(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
             y_sq_int = y_int ** 2
-            assert y_sq_int.max() < 2 ** 31:
+            assert y_sq_int.max() < 2 ** 31
 
-
-            var_int = torch.mean(y_int ** 2, axis=2, keepdim=True)
+            '''
+            y_sq_int = y_sq_int >> 10 << 10
+            var_int = torch.mean(y_sq_int, axis=2, keepdim=True)
             std_int = torch.round(torch.sqrt(var_int))
-            new_scale_factor = 1 / std_int
-            #print(new_scale_factor.shape)
+            '''
+            '''
+            # Normal std computation for comparison
+            var_int = torch.mean(y_sq_int, axis=2, keepdim=True)
+            std_int = torch.round(torch.sqrt(var_int))
+            x = y_int / std_int
+            print(x[0][0][0:8])
+            '''
+
+            y_sq_int = y_sq_int >> 10
+            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+            assert var_int.max() < 2**31
+            std_int = torch.round(torch.sqrt(var_int))
+            std_int = std_int << 5
+            root_n = torch.sqrt(torch.tensor(n))
+            std_int /= root_n
+
+            x = y_int / std_int
             #print((new_scale_factor * y_int)[0][0][0:10])
-        #if self.quant_mode == 'none':
-        if True:
-            #print('-----')
-            #print(x.shape)
-            #print(x[24][1][585:590])
-            mean = x.mean(axis=2, keepdim=True)
-            y = x - mean
-            #print(y[24][1][585:590])
-            var = torch.mean(y ** 2, axis=2, keepdim=True)
-            x = y / torch.sqrt(self.eps + var)
-            #print(torch.sqrt(self.eps + var)[24][1])
-            #print(x[24][1][585:590])
-            #raise Exception
             x = x * self.weight + self.bias
-            #print(x[24][1][585:590])
-            #print('-----')
             return x
+        #if self.quant_mode == 'none':
 
 
 class QuantLinearWrapper(Module):
