@@ -177,6 +177,14 @@ class SymmetricQuantFunction(Function):
 
         return grad_output.clone() / scale, None, None, None, None
 
+class round_ste(Function):
+    @staticmethod
+    def forward(ctx, x):
+        return torch.round(x)
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.clone()
+
 # z = w * x
 # inputs alpha_x * alpha_w / alpha_z
 def batch_frexp(inputs, max_bit=31):

@@ -304,39 +304,31 @@ class QuantLayerNorm(Module):
 
         if self.quant_mode == 'symmetric':
             x = x_backup
-            x_int = x / scaling_factor
             n = float(x.shape[2])
-            mean_int = torch.round(x_int.mean(axis=2, keepdim=True))
+            x_int = x / scaling_factor
+
+            '''
+            sum_int = x_int.sum(axis=2, keepdim=True)
+            y_int = n * x_int - sum_int
+            y_int = y_int / 2**5
+            scale_factor = 2**5 / n
+            '''
+
+            mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
             y_sq_int = y_int ** 2
             assert y_sq_int.max() < 2 ** 31
 
-            '''
-            y_sq_int = y_sq_int >> 10 << 10
-            var_int = torch.mean(y_sq_int, axis=2, keepdim=True)
-            std_int = torch.round(torch.sqrt(var_int))
-            '''
-            '''
-            # Normal std computation for comparison
-            var_int = torch.mean(y_sq_int, axis=2, keepdim=True)
-            std_int = torch.round(torch.sqrt(var_int))
-            x = y_int / std_int
-            print(x[0][0][0:8])
-            '''
-
             y_sq_int = y_sq_int >> 10
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
             assert var_int.max() < 2**31
-            std_int = torch.round(torch.sqrt(var_int))
-            std_int = std_int << 5
-            root_n = torch.sqrt(torch.tensor(n))
-            std_int /= root_n
+            scale_factor = 1 / torch.sqrt(var_int) # cast to float
+            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / 2**5
 
-            x = y_int / std_int
+            x = y_int * scale_factor
             #print((new_scale_factor * y_int)[0][0][0:10])
             x = x * self.weight + self.bias
             return x
-        #if self.quant_mode == 'none':
 
 
 class QuantLinearWrapper(Module):
