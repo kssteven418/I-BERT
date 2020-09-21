@@ -285,28 +285,20 @@ class QuantLayerNorm(Module):
         self.eps = ln.eps
         self.weight = Parameter(ln.weight.data.clone())
         self.bias = Parameter(ln.bias.data.clone())
+        self.shift = 5
         #self.ln = ln
 
     def forward(self, x, scaling_factor=None):
-        x_backup = x
-        #print('-----')
-        #print(x[24][1][585:590])
-        mean = x.mean(axis=2, keepdim=True)
-        y = x - mean
-        #print(y[24][1][585:590])
-        var = torch.mean(y ** 2, axis=2, keepdim=True)
-        x = y / torch.sqrt(self.eps + var)
-        #print(torch.sqrt(self.eps + var)[24][1])
-        #print(x[24][1][585:590])
-        x = x * self.weight + self.bias
-        #print(x[24][1][585:590])
-        #print('-----')
         if self.quant_mode == 'none':
+            mean = x.mean(axis=2, keepdim=True)
+            y = x - mean
+            var = torch.mean(y ** 2, axis=2, keepdim=True)
+            x = y / torch.sqrt(self.eps + var)
+            x = x * self.weight + self.bias
             return x
 
-        if self.quant_mode == 'symmetric':
-            x = x_backup
-            n = float(x.shape[2])
+        elif self.quant_mode == 'symmetric':
+            n = torch.tensor(x.shape[2], dtype=torch.float)
             x_int = x / scaling_factor
 
             '''
@@ -321,31 +313,28 @@ class QuantLayerNorm(Module):
             y_int = x_int - mean_int
             y_sq_int = y_int ** 2
             assert y_sq_int.max() < 2 ** 31
+            y_sq_int = round_ste.apply(y_sq_int / (2 ** (2 * self.shift)))
 
-            y_sq_int = y_sq_int >> 10
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
             assert var_int.max() < 2 ** 31
+
             scale_factor = 1 / torch.sqrt(var_int) # cast to float
-            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / 2 ** 5
+            scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / (2 ** self.shift)
             x = y_int * scale_factor
 
             if self.quant_mode == 'symmetric':
-                self.bias_scale_factor = symmetric_linear_quantization_params(
-                    16, self.bias.data.detach(), self.bias.data.detach(),
-                    per_channel=True)
-                bias = torch.ones_like(self.bias)
-                bias_scale_factor = self.bias.data.detach() / self.weight.data.detach()
+                bias = self.bias.data.detach() / self.weight.data.detach()
+                bias_scale_factor = bias.clone() # bias_int == torch.ones_like(bias)
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
             # requantize here?
-            x, scale_factor = self.activation(x, scale_factor)
-            '''
+            x, scale_factor = self.activation(x, scale_factor,
                                identity=bias,
                                identity_scaling_factor=bias_scale_factor)
-            '''
 
-            #print((new_scale_factor * y_int)[0][0][0:10])
-            x = x * self.weight + bias * bias_scale_factor * self.weight
+            #x = x * self.weight + bias * bias_scale_factor * self.weight
+            #x += bias * bias_scale_factor
+            x = x * self.weight
             return x, scale_factor
 
 
