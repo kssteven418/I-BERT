@@ -38,6 +38,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         qn_block_size: int = 8,
         init_fn: Callable = None,
         quant_mode: str = 'none',
+        number: int = None,
     ) -> None:
         super().__init__()
 
@@ -45,6 +46,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             init_fn()
 
         self.quant_mode = quant_mode
+        self.number = number
 
         # Initialize parameters
         self.embedding_dim = embedding_dim

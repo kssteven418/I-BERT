@@ -72,7 +72,9 @@ class QuantAct(Module):
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
                 identity=None, 
-                identity_scaling_factor=None):
+                identity_scaling_factor=None,
+                specified_min=None,
+                specified_max=None):
         # collect runnng stats
         if self.running_stat:
             if not self.percentile:
@@ -104,11 +106,13 @@ class QuantAct(Module):
             if identity is not None:
                 return x + identity, None
             return x, None
-
+        
+        x_min = self.x_min if specified_min is None else specified_min
+        x_max = self.x_max if specified_max is None else specified_max
         # scaling factor and zero point(if necessary) of the activation outputs
         if self.quant_mode == 'symmetric':
             self.act_scaling_factor = symmetric_linear_quantization_params(
-                    self.activation_bit, self.x_min, self.x_max, 
+                    self.activation_bit, x_min, x_max, 
                     per_channel=False)
         else:
             '''

@@ -40,6 +40,7 @@ class MultiheadAttention(nn.Module):
         q_noise=0.0,
         qn_block_size=8,
         quant_mode='none',
+        return_output_scale=False,
         number=0,
     ):
         super().__init__()
