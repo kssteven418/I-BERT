@@ -73,7 +73,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.self_attn_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
+        self.self_attn_layer_norm = QuantLayerNorm(16, quant_mode=self.quant_mode)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
         self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
@@ -95,7 +95,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.final_layer_norm = QuantLayerNorm(8, 32, quant_mode=self.quant_mode)
+        self.final_layer_norm = QuantLayerNorm(16, quant_mode=self.quant_mode)
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
@@ -173,7 +173,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         '''
 
         x_int = x / x_scale_factor
-        x = self.self_attn_layer_norm(x, x_scale_factor)
+        x, x_scale_factor = self.self_attn_layer_norm(x, x_scale_factor)
 
         x, x_scale_factor = self.fc1_act(x, x_scale_factor)
         residual, residual_scale_factor = x, x_scale_factor
@@ -192,7 +192,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         #if self.number == 8:
         #    print(x[24][1][585:590])
         x_int = x / x_scale_factor
-        x = self.final_layer_norm(x, x_scale_factor)
+        x, x_scale_factor = self.final_layer_norm(x, x_scale_factor)
         #if self.number == 8:
         #    print('----')
         #    print(x[24][1][585:590])

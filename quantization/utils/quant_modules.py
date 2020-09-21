@@ -264,15 +264,21 @@ class QuantLinear(Module):
 
 class QuantLayerNorm(Module):
     def __init__(self,
-                 weight_bit,
-                 bias_bit,
+                 #weight_bit,
+                 #bias_bit,
+                 output_bit,
                  quant_mode='none'):
         super(QuantLayerNorm, self).__init__()
         self.quant_mode = quant_mode
-        self.weight_bit = weight_bit
-        self.bias_bit = bias_bit
+        #self.weight_bit = weight_bit
+        #self.bias_bit = bias_bit
+        self.output_bit = output_bit
 
-        self.activation = QuantAct(8, quant_mode=self.quant_mode)
+        self.activation = QuantAct(output_bit, quant_mode=self.quant_mode)
+        if quant_mode == "symmetric":
+            self.weight_function = SymmetricQuantFunction.apply
+        elif quant_mode == "asymmetric":
+            self.weight_function = AsymmetricQuantFunction.apply
 
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
@@ -322,12 +328,25 @@ class QuantLayerNorm(Module):
             scale_factor = 1 / torch.sqrt(var_int) # cast to float
             scale_factor = scale_factor * torch.sqrt(torch.tensor(n)) / 2 ** 5
             x = y_int * scale_factor
+
+            if self.quant_mode == 'symmetric':
+                self.bias_scale_factor = symmetric_linear_quantization_params(
+                    16, self.bias.data.detach(), self.bias.data.detach(),
+                    per_channel=True)
+                bias = torch.ones_like(self.bias)
+                bias_scale_factor = self.bias.data.detach() / self.weight.data.detach()
+            else:
+                raise Exception('For LN, we only support symmetric quantization.')
             # requantize here?
-            #x, scale_factor = self.activation(x, scale_factor)
+            x, scale_factor = self.activation(x, scale_factor)
+            '''
+                               identity=bias,
+                               identity_scaling_factor=bias_scale_factor)
+            '''
 
             #print((new_scale_factor * y_int)[0][0][0:10])
-            x = x * self.weight + self.bias
-            return x
+            x = x * self.weight + bias * bias_scale_factor * self.weight
+            return x, scale_factor
 
 
 class QuantLinearWrapper(Module):
