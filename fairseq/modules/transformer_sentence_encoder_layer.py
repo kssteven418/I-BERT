@@ -47,7 +47,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.quant_mode = quant_mode
         self.number = number
-        self.ln_output_bit = 16
+        self.ln_output_bit = 8
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -182,9 +182,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
         residual, residual_scaling_factor = x, x_scaling_factor
 
         x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
-        x = self.activation_fn(x)
+        x = self.activation_fn(x) # TODO, int-only-activation
         x = self.activation_dropout_module(x)
-        x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) #TODO
+        x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
         x = self.dropout_module(x)
         x, x_scaling_factor = self.pre_final_layer_norn_act(

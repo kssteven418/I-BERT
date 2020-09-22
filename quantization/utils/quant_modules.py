@@ -298,23 +298,15 @@ class QuantLayerNorm(Module):
             return x
 
         elif self.quant_mode == 'symmetric':
-            n = torch.tensor(x.shape[2], dtype=torch.float)
+            n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
             x_int = x / scaling_factor
-
-            '''
-            # using sum instead of mean
-            sum_int = x_int.sum(axis=2, keepdim=True)
-            y_int = n * x_int - sum_int
-            y_int = round_ste.apply(y_int / 2**10)
-            scaling_factor = 2**10 / n
-            '''
 
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
+
             y_sq_int = y_int ** 2
             assert y_sq_int.max() < 2 ** 31
             y_sq_int = round_ste.apply(y_sq_int / (2 ** (2 * self.shift)))
-
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
             assert var_int.max() < 2 ** 31
 
@@ -327,15 +319,13 @@ class QuantLayerNorm(Module):
                 bias_scaling_factor = bias.clone() # bias_int == torch.ones_like(bias)
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
+
             # requantize here?
             x, scaling_factor = self.activation(x, scaling_factor,
                                identity=bias,
                                identity_scaling_factor=bias_scaling_factor)
 
-            #x = x * self.weight + bias * bias_scaling_factor * self.weight
-            #x += bias * bias_scaling_factor
-            x = x * self.weight
-            return x, scaling_factor
+            return x * self.weight, scaling_factor * self.weight
 
 
 class QuantLinearWrapper(Module):
