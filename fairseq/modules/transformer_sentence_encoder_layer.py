@@ -158,27 +158,34 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
         x = self.dropout_module(x)
 
-        # 1st LN
+        # Pre LN1 activation (+ residual addition)
         x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
+        # LN1
         x, x_scaling_factor = self.self_attn_layer_norm(x, x_scaling_factor)
 
+        # Pre FC1 activation
         x, x_scaling_factor = self.fc1_act(x, x_scaling_factor)
         residual, residual_scaling_factor = x, x_scaling_factor
 
+        # FC1
         x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
         x = self.activation_fn(x) # TODO, int-only-activation
         x = self.activation_dropout_module(x)
         #if self.number == 8:
         #    #print('before fc2_act2', float(x.min()), float(x.max()))
         #    pass
+
+        # Pre FC2 activation
         x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
         #if self.number == 8:
         #    #print('before fc2', float(x.min()), float(x.max()))
         #    pass
+
+        # FC2
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
         x = self.dropout_module(x)
         if self.number == 8:
@@ -187,6 +194,10 @@ class TransformerSentenceEncoderLayer(nn.Module):
             if self.cnt == 5:
                 raise Exception
             pass
+
+        #x = torch.clamp(x, -100, 600)
+
+        # Pre LN2 activation (+ residual addition)
         x, x_scaling_factor = self.pre_final_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
@@ -194,6 +205,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         #if self.number == 8:
         #    print(x[24][1][585:590])
+
+        # LN2
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
         #if self.number == 8:
         #    print('----')
