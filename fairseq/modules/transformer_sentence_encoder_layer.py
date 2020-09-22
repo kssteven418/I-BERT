@@ -47,7 +47,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.quant_mode = quant_mode
         self.number = number
-        self.ln_output_bit = 8
+        self.ln_output_bit = 16
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -163,19 +163,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
-        # Check LN
-        '''
-        bias = self.self_attn_layer_norm.bias
-        weight = self.self_attn_layer_norm.weight
-        mean = x.mean(axis=2, keepdim=True)
-        var = torch.mean((x-mean)**2, axis=2, keepdim=True)
-        y = (x-mean) / torch.sqrt(var + 1e-5)
-        y = y * weight + bias
-
-        x = y
-        '''
-
-        x_int = x / x_scaling_factor
         x, x_scaling_factor = self.self_attn_layer_norm(x, x_scaling_factor)
 
         x, x_scaling_factor = self.fc1_act(x, x_scaling_factor)
@@ -194,7 +181,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         #if self.number == 8:
         #    print(x[24][1][585:590])
-        x_int = x / x_scaling_factor
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
         #if self.number == 8:
         #    print('----')
