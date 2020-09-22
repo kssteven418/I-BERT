@@ -48,6 +48,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.quant_mode = quant_mode
         self.number = number
         self.ln_output_bit = 16
+        self.cnt = 0
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -171,9 +172,21 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
         x = self.activation_fn(x) # TODO, int-only-activation
         x = self.activation_dropout_module(x)
+        #if self.number == 8:
+        #    #print('before fc2_act2', float(x.min()), float(x.max()))
+        #    pass
         x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
+        #if self.number == 8:
+        #    #print('before fc2', float(x.min()), float(x.max()))
+        #    pass
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
         x = self.dropout_module(x)
+        if self.number == 8:
+            print('after fc2', float(x.min()), float(x.max()))
+            self.cnt += 1
+            if self.cnt == 5:
+                raise Exception
+            pass
         x, x_scaling_factor = self.pre_final_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,

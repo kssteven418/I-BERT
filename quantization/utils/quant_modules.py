@@ -295,7 +295,7 @@ class QuantLayerNorm(Module):
             var = torch.mean(y ** 2, axis=2, keepdim=True)
             x = y / torch.sqrt(self.eps + var)
             x = x * self.weight + self.bias
-            return x
+            return x, None
 
         elif self.quant_mode == 'symmetric':
             n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
