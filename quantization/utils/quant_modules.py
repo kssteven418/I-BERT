@@ -81,12 +81,16 @@ class QuantAct(Module):
             if not self.percentile:
                 x_min = x_act.data.min()
                 x_max = x_act.data.max()
+            else:
+                raise NotImplementedError("percentile mode is not currently supported.")
+            '''
             elif self.quant_mode == 'symmetric':
                 x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
                                 0.1, self.percentage, output_tensor=True)
             elif self.quant_mode == 'asymmetric':
                 x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
                                 0, self.percentage, output_tensor=True)
+            '''
             # Initialization
             if self.x_min == self.x_max:
                 self.x_min += x_min
@@ -286,10 +290,10 @@ class QuantLayerNorm(Module):
         self.weight = Parameter(ln.weight.data.clone())
         self.bias = Parameter(ln.bias.data.clone())
         self.shift = 5
-        #self.ln = ln
 
     def forward(self, x, scaling_factor=None):
-        if self.quant_mode == 'none':
+        if True:
+        #if self.quant_mode == 'none':
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)
@@ -305,10 +309,15 @@ class QuantLayerNorm(Module):
             y_int = x_int - mean_int
 
             y_sq_int = y_int ** 2
-            assert y_sq_int.max() < 2 ** 31
+            #assert y_sq_int.max() < 2 ** 31
             y_sq_int = round_ste.apply(y_sq_int / (2 ** (2 * self.shift)))
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            assert var_int.max() < 2 ** 31
+            #assert var_int.max() < 2 ** 31
+
+            '''
+            y_sq_int = (round_ste.apply(y_int / (2 ** self.shift))) ** 2
+            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+            '''
 
             scaling_factor = 1 / torch.sqrt(var_int) # cast to float
             scaling_factor = scaling_factor * torch.sqrt(n) / (2 ** self.shift)

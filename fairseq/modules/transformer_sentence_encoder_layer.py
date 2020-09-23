@@ -158,6 +158,16 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
         x = self.dropout_module(x)
 
+        #print(x_scaling_factor.shape, residual_scaling_factor.shape)
+
+        '''
+        x = fixedpoint_mul.apply(x, x_scaling_factor, 32,
+                                 self.quant_mode, x_scaling_factor,
+                                 residual, residual_scaling_factor)
+
+        x = x * x_scaling_factor
+        '''
+
         # Pre LN1 activation (+ residual addition)
         x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scaling_factor,
@@ -188,14 +198,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # FC2
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
         x = self.dropout_module(x)
-        if self.number == 8:
-            print('after fc2', float(x.min()), float(x.max()))
-            self.cnt += 1
-            if self.cnt == 5:
-                raise Exception
-            pass
-
-        #x = torch.clamp(x, -100, 600)
 
         # Pre LN2 activation (+ residual addition)
         x, x_scaling_factor = self.pre_final_layer_norn_act(
@@ -203,15 +205,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
-        #if self.number == 8:
-        #    print(x[24][1][585:590])
-
         # LN2
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
-        #if self.number == 8:
-        #    print('----')
-        #    print(x[24][1][585:590])
-        #    print(self.final_layer_norm.weight[585:590])
-        #    print(self.final_layer_norm.bias[585:590])
-        #    raise Exception
+
         return x, attn
