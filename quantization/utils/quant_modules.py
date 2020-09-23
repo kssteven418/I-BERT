@@ -21,7 +21,8 @@ class QuantAct(Module):
                  quant_mode="asymmetric",
                  show_flag=False,
                  percentile=False,
-                 signed=True):
+                 signed=True,
+                 per_channel=False):
         super(QuantAct, self).__init__()
 
         self.activation_bit = activation_bit
@@ -39,6 +40,7 @@ class QuantAct(Module):
         self.register_buffer('act_scaling_factor', torch.zeros(1))
 
         self.quant_mode = quant_mode
+        self.per_channel = per_channel
 
         if quant_mode == "none":
             self.act_function = None
@@ -79,8 +81,12 @@ class QuantAct(Module):
         x_act = x if identity is None else identity + x
         if self.running_stat:
             if not self.percentile:
-                x_min = x_act.data.min()
-                x_max = x_act.data.max()
+                if not self.per_channel:
+                    x_min = x_act.data.min()
+                    x_max = x_act.data.max()
+                else:
+                    x_min = x_act.data.min(axis=-1)
+                    x_max = x_act.data.max(axis=-1)
             else:
                 raise NotImplementedError("percentile mode is not currently supported.")
             '''
@@ -292,8 +298,8 @@ class QuantLayerNorm(Module):
         self.shift = 5
 
     def forward(self, x, scaling_factor=None):
-        if True:
-        #if self.quant_mode == 'none':
+        #if True:
+        if self.quant_mode == 'none':
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)
@@ -308,16 +314,9 @@ class QuantLayerNorm(Module):
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
 
-            y_sq_int = y_int ** 2
-            #assert y_sq_int.max() < 2 ** 31
-            y_sq_int = round_ste.apply(y_sq_int / (2 ** (2 * self.shift)))
-            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            #assert var_int.max() < 2 ** 31
-
-            '''
             y_sq_int = (round_ste.apply(y_int / (2 ** self.shift))) ** 2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            '''
+            assert var_int.max() < 2 ** 31
 
             scaling_factor = 1 / torch.sqrt(var_int) # cast to float
             scaling_factor = scaling_factor * torch.sqrt(n) / (2 ** self.shift)
