@@ -162,8 +162,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
         x = self.dropout_module(x)
 
-        #print(x_scaling_factor.shape, residual_scaling_factor.shape)
-
         '''
         x = fixedpoint_mul.apply(x, x_scaling_factor, 32,
                                  self.quant_mode, x_scaling_factor,
@@ -173,14 +171,10 @@ class TransformerSentenceEncoderLayer(nn.Module):
         '''
 
         # Pre LN1 activation (+ residual addition)
-        #print(x + residual)
-
         x, x_scaling_factor, x_exponents = self.pre_self_attn_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
-        #print(x)
-        #print()
 
         # LN1
         x, x_scaling_factor = self.self_attn_layer_norm(

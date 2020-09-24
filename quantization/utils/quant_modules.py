@@ -145,6 +145,8 @@ class QuantAct(Module):
                         x_max * (1 - self.act_range_momentum)
 
         if self.quant_mode == 'none':
+            if self.exponential_quant:
+                return x_act, None, None
             return x_act, None
         
         x_min = self.x_min if specified_min is None else specified_min
