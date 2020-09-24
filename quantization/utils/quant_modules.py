@@ -23,6 +23,7 @@ class QuantAct(Module):
                  percentile=False,
                  signed=True,
                  per_channel=False,
+                 exponential_quant=False,
                  channel_len=None):
         super(QuantAct, self).__init__()
 
@@ -45,9 +46,14 @@ class QuantAct(Module):
             self.register_buffer('x_min', torch.zeros(channel_len))
             self.register_buffer('x_max', torch.zeros(channel_len))
             self.register_buffer('act_scaling_factor', torch.zeros(channel_len))
+            if exponential_quant:
+                self.register_buffer('exponents', torch.zeros(channel_len))
+                self.register_buffer('global_scaling_factor', torch.zeros(channel_len))
+
 
         self.quant_mode = quant_mode
         self.per_channel = per_channel
+        self.exponential_quant = exponential_quant
 
         if quant_mode == "none":
             self.act_function = None
@@ -77,6 +83,23 @@ class QuantAct(Module):
         """
         self.running_stat = True
         self.show_flag = False
+
+    def compute_exponents(self, x_min, x_max):
+        if self.running_stat:
+            with torch.no_grad():
+                n = 2 ** (self.activation_bit - 1) - 1
+                self.exponents = torch.zeros_like(self.exponents)
+
+                x_range, _ = torch.max(torch.stack([x_min.abs(), x_max.abs()], dim=1), dim=1)
+                x_range = torch.clamp(x_range, min=1e-8)
+                x_range_min = x_range.min()
+                x_range = x_range / x_range_min
+
+                self.exponents = x_range.log2().ceil()
+                self.global_scaling_factor = x_range_min / n
+
+        return self.global_scaling_factor * (2 ** self.exponents)
+
 
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
@@ -128,7 +151,10 @@ class QuantAct(Module):
         x_max = self.x_max if specified_max is None else specified_max
         # scaling factor and zero point(if necessary) of the activation outputs
         if self.quant_mode == 'symmetric':
-            self.act_scaling_factor = symmetric_linear_quantization_params(
+            if self.exponential_quant:
+                self.act_scaling_factor = self.compute_exponents(x_min, x_max)
+            else:
+                self.act_scaling_factor = symmetric_linear_quantization_params(
                     self.activation_bit, x_min, x_max, 
                     per_channel=self.per_channel)
         else:
@@ -155,6 +181,10 @@ class QuantAct(Module):
                     identity, identity_scaling_factor)
 
         correct_output_scale = self.act_scaling_factor.view(-1)
+
+        if self.exponential_quant:
+            return quant_act_int * correct_output_scale, self.global_scaling_factor, self.exponents
+
         return quant_act_int * correct_output_scale, self.act_scaling_factor
 
 #class QuantSoftmax(Module):
@@ -308,16 +338,6 @@ class QuantLayerNorm(Module):
     def forward(self, x, scaling_factor=None):
         if True:
         #if self.quant_mode == 'none':
-
-            '''
-            x_int = x / scaling_factor
-            mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
-            y_int = x_int - mean_int
-            y_sq_int = y_int ** 2
-            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            print(var_int.max())
-            '''
-
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)

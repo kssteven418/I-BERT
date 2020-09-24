@@ -98,7 +98,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         self.pre_final_layer_norn_act = QuantAct(8, quant_mode=self.quant_mode,
-                channel_len=768, per_channel=True)
+                channel_len=768, per_channel=True, exponential_quant=True)
 
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -205,26 +205,22 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # Pre LN2 activation (+ residual addition)
-        x, x_scaling_factor = self.pre_final_layer_norn_act(
+        x, x_scaling_factor, x_exponents = self.pre_final_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
+        #if self.debug:
         if self.number == 8:
-            print('Scale factor:', x_scaling_factor.shape, 
-                    float(x_scaling_factor.min()),
-                    float(x_scaling_factor.max()))
-            print(x_scaling_factor.sort(descending=True).values[0:10])
-            x_int = x / x_scaling_factor
-            print('integer act:',
-                    float(x_int.min()),
-                    float(x_int.abs().min()),
-                    float(x_int.max()))
+            print('Scale factor:', x_scaling_factor)
+            x_int = x / (x_scaling_factor * (2 ** x_exponents))
+            print('integer act:', x[0][0][0:20])
+            print('integer act:', x_int[0][0][0:20])
             print()
 
 
-        #if self.number == 8:
         if self.debug:
+        #if self.number == 8:
             print('NUMBER:', self.number)
             x_int = x / x_scaling_factor
             #print(x_scaling_factor.shape)
