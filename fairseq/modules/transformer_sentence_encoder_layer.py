@@ -162,8 +162,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
         x = self.dropout_module(x)
 
-        #print(x_scaling_factor.shape, residual_scaling_factor.shape)
-
         '''
         x = fixedpoint_mul.apply(x, x_scaling_factor, 32,
                                  self.quant_mode, x_scaling_factor,
@@ -173,22 +171,17 @@ class TransformerSentenceEncoderLayer(nn.Module):
         '''
 
         # Pre LN1 activation (+ residual addition)
-        #print('LN1 ACTIVATION', self.number)
         x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
         # LN1
-        #print('LN1', self.number)
         x, x_scaling_factor = self.self_attn_layer_norm(x, x_scaling_factor)
 
         # Pre FC1 activation
         x, x_scaling_factor = self.fc1_act(x, x_scaling_factor)
         residual, residual_scaling_factor = x, x_scaling_factor
-        #print(residual)
-        #print(residual_scaling_factor)
-        #raise Exception
 
         # FC1
         x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
@@ -210,7 +203,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # Pre LN2 activation (+ residual addition)
-        #print('LN2 ACTIVATION', self.number)
         x, x_scaling_factor, x_exponents = self.pre_final_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
@@ -239,16 +231,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
             print()
 
         # LN2
-        '''
-        print('LN2', self.number)
-        print(x[0][0][0:20])
-        print(x_scaling_factor)
-        print('*'*20)
-        '''
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor, x_exponents)
-        '''
-        print('After LN2')
-        print(x[0][0][0:20])
-        '''
 
         return x, attn
