@@ -336,9 +336,8 @@ class QuantLayerNorm(Module):
         self.shift = 5
 
     def forward(self, x, scaling_factor=None, exponents=None):
-        if exponents is None:
-        #if self.quant_mode == 'none':
-            
+        #if True:
+        if self.quant_mode == 'none':
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)
@@ -347,6 +346,7 @@ class QuantLayerNorm(Module):
             return x, None
 
         elif self.quant_mode == 'symmetric':
+            assert exponents is not None
             n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
             x_int = x / scaling_factor
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
@@ -360,8 +360,8 @@ class QuantLayerNorm(Module):
             x = y_int * scaling_factor
 
             if self.quant_mode == 'symmetric':
-                bias = self.bias.data.detach() / self.weight.data.detach()
-                bias_scaling_factor = bias.clone() # bias_int == torch.ones_like(bias)
+                bias = self.bias.data.detach() / (self.weight.data.detach())
+                bias_scaling_factor = bias.clone() + 1e-5 # bias_int == torch.ones_like(bias)
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
 
