@@ -22,7 +22,8 @@ class QuantAct(Module):
                  show_flag=False,
                  percentile=False,
                  signed=True,
-                 per_channel=False):
+                 per_channel=False,
+                 channel_len=None):
         super(QuantAct, self).__init__()
 
         self.activation_bit = activation_bit
@@ -35,9 +36,15 @@ class QuantAct(Module):
         self.iter_counter = 0
         self.percentage = 99.9
 
-        self.register_buffer('x_min', torch.zeros(1))
-        self.register_buffer('x_max', torch.zeros(1))
-        self.register_buffer('act_scaling_factor', torch.zeros(1))
+        if not per_channel:
+            self.register_buffer('x_min', torch.zeros(1))
+            self.register_buffer('x_max', torch.zeros(1))
+            self.register_buffer('act_scaling_factor', torch.zeros(1))
+        else:
+            assert channel_len is not None
+            self.register_buffer('x_min', torch.zeros(channel_len))
+            self.register_buffer('x_max', torch.zeros(channel_len))
+            self.register_buffer('act_scaling_factor', torch.zeros(channel_len))
 
         self.quant_mode = quant_mode
         self.per_channel = per_channel
@@ -85,8 +92,8 @@ class QuantAct(Module):
                     x_min = x_act.data.min()
                     x_max = x_act.data.max()
                 else:
-                    x_min = x_act.data.min(axis=-1)
-                    x_max = x_act.data.max(axis=-1)
+                    x_min = x_act.data.min(axis=0).values.min(axis=0).values
+                    x_max = x_act.data.max(axis=0).values.max(axis=0).values
             else:
                 raise NotImplementedError("percentile mode is not currently supported.")
             '''
@@ -98,15 +105,16 @@ class QuantAct(Module):
                                 0, self.percentage, output_tensor=True)
             '''
             # Initialization
-            if self.x_min == self.x_max:
-                self.x_min += x_min
-                self.x_max += x_max
+            #if self.x_min == self.x_max:
+            if torch.eq(self.x_min, self.x_max).all():
+                self.x_min = self.x_min + x_min
+                self.x_max = self.x_max + x_max
 
             # exponential moving average (EMA)
             # use momentum to prevent the quantized values change greatly every iteration
             elif self.act_range_momentum == -1:
-                self.x_min = min(self.x_min, x_min)
-                self.x_max = max(self.x_max, x_max)
+                self.x_min = torch.min(self.x_min, x_min)
+                self.x_max = torch.max(self.x_max, x_max)
             else:
                 self.x_min = self.x_min * self.act_range_momentum +\
                         x_min * (1 - self.act_range_momentum)
@@ -122,7 +130,7 @@ class QuantAct(Module):
         if self.quant_mode == 'symmetric':
             self.act_scaling_factor = symmetric_linear_quantization_params(
                     self.activation_bit, x_min, x_max, 
-                    per_channel=False)
+                    per_channel=self.per_channel)
         else:
             '''
             self.act_scaling_factor, self.act_zero_point = \
@@ -298,8 +306,18 @@ class QuantLayerNorm(Module):
         self.shift = 5
 
     def forward(self, x, scaling_factor=None):
-        #if True:
-        if self.quant_mode == 'none':
+        if True:
+        #if self.quant_mode == 'none':
+
+            '''
+            x_int = x / scaling_factor
+            mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
+            y_int = x_int - mean_int
+            y_sq_int = y_int ** 2
+            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+            print(var_int.max())
+            '''
+
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)

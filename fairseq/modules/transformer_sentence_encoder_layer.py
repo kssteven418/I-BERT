@@ -49,6 +49,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.number = number
         self.ln_output_bit = 16
         self.cnt = 0
+        self.debug = False
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -71,7 +72,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         # TODO(Sehoon): proper output bit? 32 or 8
-        self.pre_self_attn_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
+        self.pre_self_attn_layer_norn_act = QuantAct(8, quant_mode=self.quant_mode,
+                channel_len=768, per_channel=True)
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -95,7 +97,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
             qn_block_size=qn_block_size,
         )
 
-        self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
+        self.pre_final_layer_norn_act = QuantAct(8, quant_mode=self.quant_mode,
+                channel_len=768, per_channel=True)
+
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
         self.final_layer_norm = QuantLayerNorm(self.ln_output_bit, 
@@ -197,6 +201,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # FC2
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
+
         x = self.dropout_module(x)
 
         # Pre LN2 activation (+ residual addition)
@@ -204,6 +209,31 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
+
+        if self.number == 8:
+            print('Scale factor:', x_scaling_factor.shape, 
+                    float(x_scaling_factor.min()),
+                    float(x_scaling_factor.max()))
+            print(x_scaling_factor.sort(descending=True).values[0:10])
+            x_int = x / x_scaling_factor
+            print('integer act:',
+                    float(x_int.min()),
+                    float(x_int.abs().min()),
+                    float(x_int.max()))
+            print()
+
+
+        #if self.number == 8:
+        if self.debug:
+            print('NUMBER:', self.number)
+            x_int = x / x_scaling_factor
+            #print(x_scaling_factor.shape)
+            print(x[:,:,588])
+            print(x[:,:,589])
+            print('---')
+            print(x_int[:,:,588].type(torch.int))
+            print(x_int[:,:,589].type(torch.int))
+            print()
 
         # LN2
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
