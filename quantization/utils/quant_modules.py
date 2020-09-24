@@ -335,9 +335,10 @@ class QuantLayerNorm(Module):
         self.bias = Parameter(ln.bias.data.clone())
         self.shift = 5
 
-    def forward(self, x, scaling_factor=None):
-        if True:
+    def forward(self, x, scaling_factor=None, exponents=None):
+        if exponents is None:
         #if self.quant_mode == 'none':
+            
             mean = x.mean(axis=2, keepdim=True)
             y = x - mean
             var = torch.mean(y ** 2, axis=2, keepdim=True)
@@ -348,16 +349,14 @@ class QuantLayerNorm(Module):
         elif self.quant_mode == 'symmetric':
             n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
             x_int = x / scaling_factor
-
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
-
-            y_sq_int = (round_ste.apply(y_int / (2 ** self.shift))) ** 2
+            y_sq_int = y_int ** 2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            assert var_int.max() < 2 ** 31
-
+            if y_sq_int.max() > 2**32:
+                print(y_sq_int.max())
             scaling_factor = 1 / torch.sqrt(var_int) # cast to float
-            scaling_factor = scaling_factor * torch.sqrt(n) / (2 ** self.shift)
+            scaling_factor = scaling_factor * torch.sqrt(n)
             x = y_int * scaling_factor
 
             if self.quant_mode == 'symmetric':
@@ -371,7 +370,9 @@ class QuantLayerNorm(Module):
                                identity=bias,
                                identity_scaling_factor=bias_scaling_factor)
 
-            return x * self.weight, scaling_factor * self.weight
+            x = x * self.weight
+
+            return x, scaling_factor * self.weight
 
 
 class QuantLinearWrapper(Module):

@@ -210,8 +210,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
-        #if self.debug:
-        if self.number == 8:
+        #print(self.number)
+        if self.debug:
+        #if self.number == 8:
             print('Scale factor:', x_scaling_factor)
             x_int = x / (x_scaling_factor * (2 ** x_exponents))
             print('integer act:', x[0][0][0:20])
@@ -232,6 +233,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
             print()
 
         # LN2
-        x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
+        x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor, x_exponents)
 
         return x, attn
