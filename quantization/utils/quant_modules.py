@@ -109,6 +109,8 @@ class QuantAct(Module):
                 specified_max=None):
         # collect runnng stats
         x_act = x if identity is None else identity + x
+        #print('QuantAct')
+        #print(x_act[0][0][0:20])
         if self.running_stat:
             if not self.percentile:
                 if not self.per_channel:
@@ -174,6 +176,14 @@ class QuantAct(Module):
             quant_act_int = self.act_function(x, self.activation_bit, \
                     self.percentile, self.act_scaling_factor)
         else:
+            '''
+            print('FixedPointMul')
+            print(x)
+            print(pre_act_scaling_factor)
+            print(identity)
+            print(identity_scaling_factor)
+            print('-'*20)
+            '''
             quant_act_int = fixedpoint_mul.apply(
                     x, pre_act_scaling_factor, 
                     self.activation_bit, self.quant_mode, 
@@ -336,6 +346,7 @@ class QuantLayerNorm(Module):
         self.shift = 5
 
     def forward(self, x, scaling_factor=None, exponents=None):
+        #if True:
         if exponents is None:
         #if self.quant_mode == 'none':
             
