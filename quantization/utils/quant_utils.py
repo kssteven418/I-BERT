@@ -177,6 +177,14 @@ class SymmetricQuantFunction(Function):
 
         return grad_output.clone() / scale, None, None, None, None
 
+class floor_ste(Function):
+    @staticmethod
+    def forward(ctx, x):
+        return torch.floor(x)
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.clone()
+
 class round_ste(Function):
     @staticmethod
     def forward(ctx, x):

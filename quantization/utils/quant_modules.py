@@ -317,9 +317,12 @@ class QuantLayerNorm(Module):
                  #weight_bit,
                  #bias_bit,
                  output_bit,
+                 running_stat=True,
                  quant_mode='none'):
         super(QuantLayerNorm, self).__init__()
         self.quant_mode = quant_mode
+        self.running_stat = running_stat
+        self.register_buffer('shift', torch.zeros(1))
         #self.weight_bit = weight_bit
         #self.bias_bit = bias_bit
         self.output_bit = output_bit
@@ -330,12 +333,33 @@ class QuantLayerNorm(Module):
         elif quant_mode == "asymmetric":
             self.weight_function = AsymmetricQuantFunction.apply
 
+    def fix(self):
+        self.running_stat = False
+
+    def unfix(self):
+        self.running_stat = True
+
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
         self.eps = ln.eps
         self.weight = Parameter(ln.weight.data.clone())
         self.bias = Parameter(ln.bias.data.clone())
-        self.shift = 5
+
+    def set_shift(self, y_int):
+        with torch.no_grad():
+            y_sq_int = y_int ** 2
+            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+            shift = (torch.log2(torch.sqrt(var_int / 2**32)).ceil()).max()
+            print('Shift adjustment: before,', self.shift)
+            self.shift = torch.max(self.shift, shift)
+            print('Shift adjustment: after,', self.shift)
+
+    def overflow_fallback(self, y_int):
+        self.set_shift(y_int)
+        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
+        y_sq_int = y_int_shifted ** 2
+        var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+        return var_int
 
     def forward(self, x, scaling_factor=None, exponents=None):
         #if True:
@@ -353,12 +377,16 @@ class QuantLayerNorm(Module):
             x_int = x / scaling_factor
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
-            y_sq_int = y_int ** 2
+
+            y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
+            y_sq_int = y_int_shifted ** 2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-            if y_sq_int.max() > 2**32:
-                print(y_sq_int.max())
+            if self.running_stat:
+                if var_int.max() >= 2**32:
+                    var_int = self.overflow_fallback(y_int)
+                    assert var_int.max() < 2**32
             scaling_factor = 1 / torch.sqrt(var_int) # cast to float
-            scaling_factor = scaling_factor * torch.sqrt(n)
+            scaling_factor = scaling_factor * torch.sqrt(n) / 2 ** self.shift
             x = y_int * scaling_factor
 
             if self.quant_mode == 'symmetric':
