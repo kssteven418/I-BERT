@@ -21,6 +21,7 @@ from fairseq.file_io import PathManager
 from fairseq.logging import meters, metrics
 from fairseq.nan_detector import NanDetector
 from fairseq.optim import lr_scheduler
+from quantization.utils.quantize_model import freeze_model, unfreeze_model
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class Trainer(object):
         self._warn_once = set()
         self._wrapped_criterion = None
         self._wrapped_model = None
+        self._freezed = False
 
         # TODO(myleott): support tpu
         if self.cuda and self.data_parallel_world_size > 1:
@@ -114,6 +116,16 @@ class Trainer(object):
         self._start_time = time.time()
         self._previous_training_time = 0
         self._cumulative_training_time = None
+
+    def freeze(self):
+        if not self._freezed:
+            freeze_model(self.model)
+            self._freezed = True
+
+    def unfreeze(self):
+        if self._freezed:
+            unfreeze_model(self.model)
+            self._freezed = False
 
     def reinitialize(self):
         """Reinitialize the Trainer, typically after model params change."""
@@ -395,6 +407,7 @@ class Trainer(object):
 
         self._set_seed()
         self.model.train()
+        self.unfreeze()
         self.criterion.train()
         self.zero_grad()
 
@@ -611,6 +624,7 @@ class Trainer(object):
         with torch.no_grad():
             self.model.eval()
             self.criterion.eval()
+            self.freeze()
 
             sample = self._prepare_sample(sample)
             if sample is None:
