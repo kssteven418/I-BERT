@@ -372,12 +372,10 @@ class QuantLayerNorm(Module):
             return x, None
 
         elif self.quant_mode == 'symmetric':
-            assert exponents is not None
             n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
             x_int = x / scaling_factor
             mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
             y_int = x_int - mean_int
-
             y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
             y_sq_int = y_int_shifted ** 2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)

@@ -72,8 +72,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         # TODO(Sehoon): proper output bit? 32 or 8
-        self.pre_self_attn_layer_norn_act = QuantAct(8, quant_mode=self.quant_mode,
-                channel_len=768, per_channel=True, exponential_quant=True)
+        self.pre_self_attn_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode,
+                                                 channel_to_global=True)
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -172,14 +172,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
         '''
 
         # Pre LN1 activation (+ residual addition)
-        x, x_scaling_factor, x_exponents = self.pre_self_attn_layer_norn_act(
+        x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
 
         # LN1
         x, x_scaling_factor = self.self_attn_layer_norm(
-                x, x_scaling_factor, x_exponents)
+                x, x_scaling_factor)
 
         # Pre FC1 activation
         x, x_scaling_factor = self.fc1_act(x, x_scaling_factor)
@@ -204,8 +204,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         x = self.dropout_module(x)
 
+
         # Pre LN2 activation (+ residual addition)
-        x, x_scaling_factor, x_exponents = self.pre_final_layer_norn_act(
+        x, x_scaling_factor = self.pre_final_layer_norn_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
@@ -233,6 +234,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
             print()
 
         # LN2
-        x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor, x_exponents)
+        x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor)
 
         return x, x_scaling_factor, attn
