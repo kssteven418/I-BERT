@@ -47,7 +47,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         self.quant_mode = quant_mode
         self.number = number
-        self.ln_output_bit = 16
+        self.ln_output_bit = 32
         self.cnt = 0
         self.debug = False
 
@@ -140,6 +140,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        x_scaling_factor,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
     ):
@@ -147,7 +148,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         LayerNorm is applied either before or after the self-attention/ffn
         modules similar to the original Transformer implementation.
         """
-        x, x_scaling_factor = self.input_act(x)
+        x, x_scaling_factor = self.input_act(x, x_scaling_factor)
         residual, residual_scaling_factor = x, x_scaling_factor
         x, x_scaling_factor, attn = self.self_attn(
             query=x,
@@ -185,7 +186,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         residual, residual_scaling_factor = x, x_scaling_factor
 
         # FC1
-        x, x_scaling_factor = self.fc1(x, x_scaling_factor) #TODO required?
+        x, x_scaling_factor = self.fc1(x, x_scaling_factor)
         x = self.activation_fn(x) # TODO, int-only-activation
         x = self.activation_dropout_module(x)
         #if self.number == 8:
@@ -193,7 +194,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         #    pass
 
         # Pre FC2 activation
-        x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
+        x, x_scaling_factor = self.fc2_act(x) 
         #if self.number == 8:
         #    #print('before fc2', float(x.min()), float(x.max()))
         #    pass
@@ -234,4 +235,4 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # LN2
         x, x_scaling_factor = self.final_layer_norm(x, x_scaling_factor, x_exponents)
 
-        return x, attn
+        return x, x_scaling_factor, attn

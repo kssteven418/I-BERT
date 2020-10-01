@@ -265,13 +265,14 @@ class TransformerSentenceEncoder(nn.Module):
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
+        scaling_factor = None
 
         inner_states = []
         if not last_state_only:
             inner_states.append(x)
 
         for layer in self.layers:
-            x, _ = layer(x, self_attn_padding_mask=padding_mask)
+            x, scaling_factor, _ = layer(x, scaling_factor, self_attn_padding_mask=padding_mask)
             if not last_state_only:
                 inner_states.append(x)
 
