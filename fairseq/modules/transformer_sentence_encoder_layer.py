@@ -103,8 +103,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
         self.final_layer_norm = QuantLayerNorm(self.ln_output_bit, 
-                                               quant_mode=self.quant_mode,
-                                               number=self.number)
+                                               quant_mode=self.quant_mode)
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
