@@ -97,13 +97,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
             qn_block_size=qn_block_size,
         )
 
-        self.pre_final_layer_norn_act = QuantAct(8, quant_mode=self.quant_mode,
-                channel_len=768, per_channel=True, exponential_quant=True)
+        self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode, 
+                                                 channel_to_global=True)
 
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
         self.final_layer_norm = QuantLayerNorm(self.ln_output_bit, 
-                                               quant_mode=self.quant_mode)
+                                               quant_mode=self.quant_mode,
+                                               number=self.number)
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
