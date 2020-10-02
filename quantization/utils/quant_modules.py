@@ -11,6 +11,7 @@ from torch.nn import Module, Parameter
 from .quant_utils import *
 
 from fairseq.modules import LayerNorm
+from fairseq import utils
 
 # The input quantization needs to use symmetric quantization!
 class QuantAct(Module):
@@ -402,37 +403,30 @@ class QuantLayerNorm(Module):
 
             return x, scaling_factor * self.weight
 
-
-class QuantLinearWrapper(Module):
-    """
-    Wrapper class for QuantLinear module.
-    """
+class QuantSoftmax(Module):
     def __init__(self,
-                 weight_bit,
-                 bias_bit=None,
-                 quant_mode='none',
-                 per_channel=False,
-                 show_flag=False,
-                 weight_percentile=False,
-                 save_path=None,
-                 threshold=None):
-        super(QuantLinearWrapper, self).__init__()
+                 output_bit,
+                 onnx_trace,
+                 running_stat=True,
+                 quant_mode='none'):
+        super(QuantSoftmax, self).__init__()
+        self.output_bit = output_bit
+        self.onnx_trace = onnx_trace
         self.quant_mode = quant_mode
-        self.prev_act = QuantAct(weight_bit, quant_mode=self.quant_mode)
-        self.linear = QuantLinear(weight_bit, bias_bit,
-                quant_mode, per_channel, show_flag, weight_percentile,
-                save_path, threshold)
+        self.running_stat = running_stat
 
-    def set_param(self, linear):
-        self.linear.set_param(linear)
+    def fix(self):
+        self.running_stat = False
 
-    def forward(self, x):
-        if self.quant_mode == 'symmetric':
-            x, scaling_factor = self.prev_act(x)
-            x, scaling_factor = self.linear(x, scaling_factor)
-            return x
-        else:
-            raise NotImplementedError
+    def unfix(self):
+        self.running_stat = True
 
+    def forward(self, x, scaling_factor):
+        if self.quant_mode == 'none':
+            return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace)
+
+        x_max, _ = x.max(dim=-1, keepdim=True)
+        x = x - x_max
+        return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace)
 
 
