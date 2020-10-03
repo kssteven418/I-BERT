@@ -5,11 +5,7 @@ def freeze_model(model):
     freeze the activation range
     """
     #print(type(model))
-    if type(model) == QuantAct:
-        model.fix()
-    elif type(model) == QuantLinear:
-        model.fix()
-    elif type(model) == QuantLayerNorm:
+    if type(model) in [QuantAct, QuantLinear, QuantLayerNorm, QuantSoftmax]:
         model.fix()
     elif type(model) == nn.Sequential:
         for n, m in model.named_children():
@@ -27,11 +23,7 @@ def unfreeze_model(model):
     """
     unfreeze the activation range
     """
-    if type(model) == QuantAct:
-        model.unfix()
-    elif type(model) == QuantLinear:
-        model.unfix()
-    elif type(model) == QuantLayerNorm:
+    if type(model) in [QuantAct, QuantLinear, QuantLayerNorm, QuantSoftmax]:
         model.unfix()
     elif type(model) == nn.Sequential:
         for n, m in model.named_children():

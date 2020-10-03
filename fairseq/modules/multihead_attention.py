@@ -17,6 +17,7 @@ from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
 from quantization.utils.quant_modules import *
+from quantization.utils.quant_utils import *
 
 @with_incremental_state
 class MultiheadAttention(nn.Module):
@@ -388,12 +389,12 @@ class MultiheadAttention(nn.Module):
         if before_softmax:
             return attn_weights, v
 
-        attn_weights_float = self.softmax(attn_weights, attn_weights_scaling_factor)
+        attn_weights_float, attn_probs_scaling_factor = \
+                self.softmax(attn_weights, attn_weights_scaling_factor)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
-        attn_probs, _ = self.attn_probs_act(attn_probs)
         attn = torch.bmm(attn_probs, v) # TODO: integer bmm
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:

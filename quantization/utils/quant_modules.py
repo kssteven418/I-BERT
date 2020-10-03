@@ -422,11 +422,34 @@ class QuantSoftmax(Module):
         self.running_stat = True
 
     def forward(self, x, scaling_factor):
+        #print(scaling_factor)
         if self.quant_mode == 'none':
-            return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace)
+            return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
 
         x_max, _ = x.max(dim=-1, keepdim=True)
         x = x - x_max
+        temp = x.masked_fill(x.eq(float('-inf')), 0)
+        #print(float(temp.min()))
+        #print(float((temp / scaling_factor).min()))
+        exp = torch.exp(x)
+        exp_int = floor_ste.apply(exp * 255)
+        exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
+        scaling_factor = 1 / exp_int_sum
+        '''
+        temp = (exp * 256).floor().detach().cpu().numpy()
+        percentile = [np.percentile(temp, x) for x in \
+                [50, 75, 90, 95, 99, 100]]
+        print(percentile)
+
+        exp_sum = exp.sum(dim=-1, keepdim=True)
+        return exp / exp_sum
+        '''
+        return exp_int * scaling_factor, scaling_factor
+
+        '''
+        x_int = x / scaling_factor
+        x_int_max, _ = x_int.max(dim=-1, keepdim=True)
+        x_int = x_int_max - x_int
+
         return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace)
-
-
+        '''
