@@ -185,7 +185,13 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # FC1
         x, x_scaling_factor = self.fc1(x, x_scaling_factor)
-        x = self.activation_fn(x) # TODO, int-only-activation
+        if self.training:
+            x = self.activation_fn(x) # TODO, int-only-activation
+        else:
+            x_pos = torch.clamp(x, min=0)
+            x_neg = torch.clamp(x, max=0)
+            x = self.activation_fn(x_neg) + x_pos
+
         x = self.activation_dropout_module(x)
         #if self.number == 8:
         #    #print('before fc2_act2', float(x.min()), float(x.max()))
