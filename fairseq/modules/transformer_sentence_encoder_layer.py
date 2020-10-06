@@ -72,7 +72,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         # TODO(Sehoon): proper output bit? 32 or 8
-        self.pre_self_attn_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
+        self.pre_self_attn_layer_norn_act = QuantAct(32, quant_mode=self.quant_mode)
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -96,7 +96,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             qn_block_size=qn_block_size,
         )
 
-        self.pre_final_layer_norn_act = QuantAct(16, quant_mode=self.quant_mode)
+        self.pre_final_layer_norn_act = QuantAct(32, quant_mode=self.quant_mode)
 
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
