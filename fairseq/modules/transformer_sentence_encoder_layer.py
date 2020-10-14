@@ -58,6 +58,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # Initialize blocks
         self.activation_fn = utils.get_activation_fn(activation_fn)
+        self.activation_fn_approx = QuantGELU(quant_mode=self.quant_mode)
 
         self.input_act = QuantAct(8, quant_mode=self.quant_mode)
 
@@ -134,34 +135,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             quant_mode=quant_mode,
             return_output_scale=True,
         )
-    
         
-    def gelu_lagrange(self, x):
-        p = [[1.43, 2.4552102088928223], [3.06, 3.641697883605957], [4, 4]]
-
-        def _lagrange(x, p, i):
-            a = 1
-            b = 1
-            pivot = p[i]
-            for j in range(len(p)):
-                if j == i:
-                    continue
-                b = b * (pivot[0] - p[j][0])
-                a = a * (x - p[j][0])
-            return a / b * pivot[1]
-
-        def _sigmoid_lagrange(x, p):
-            x = x.clamp(min=-4, max=4)
-            sign = torch.sign(x)
-            abs = torch.abs(x)
-            
-            y0 = _lagrange(abs, p, 0)
-            y1 = _lagrange(abs, p, 1)
-            y2 = _lagrange(abs, p, 2)
-            return (sign * (y0 + y1 + y2) + 4) / 8
-
-        return x * _sigmoid_lagrange(x*1.702, p)
-
     def forward(
         self,
         x: torch.Tensor,
@@ -216,7 +190,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         if False:
             x = self.activation_fn(x) # TODO, int-only-activation
         else:
-            x = self.gelu_lagrange(x)
+            x = self.activation_fn_approx(x)
         x = self.activation_dropout_module(x)
         #if self.number == 8:
         #    #print('before fc2_act2', float(x.min()), float(x.max()))

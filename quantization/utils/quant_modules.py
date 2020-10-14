@@ -436,3 +436,56 @@ class QuantLinearWrapper(Module):
 
 
 
+class QuantGELU(Module):
+    def __init__(self,
+                 running_stat=True,
+                 quant_mode='none'):
+        super(QuantGELU, self).__init__()
+        self.register_buffer('input_scaling_factor', torch.ones(1))
+        self.quant_mode = quant_mode
+        self.running_stat = running_stat
+
+        if self.quant_mode == 'none':
+            self.activation_fn = nn.GELU()
+
+        self.k = 1.702
+        self.a = -0.1344
+        self.b = -4.94
+        self.c = 4.12
+
+        self.clamp = 4
+
+    def fix(self):
+        self.running_stat = False
+
+    def unfix(self):
+        self.running_stat = True
+
+    #def sigmoid_approx(self, x_int, scaling_factor):
+    def sigmoid_approx(self, x, scaling_factor):
+        with torch.no_grad():
+            clamp_int = torch.floor(self.clamp / scaling_factor)
+            b_int = torch.floor(self.b / scaling_factor)
+
+        with torch.no_grad():
+            sign = torch.sign(x)
+        abs = torch.abs(x)
+        abs = abs.clamp(max=4)
+        y = -0.1344 * (abs - 4.94) ** 2 + 4.12
+        y = (sign * y + 4) / 8
+        return y
+
+    def forward(self, x, scaling_factor=None):
+        if self.quant_mode == 'none':
+            return self.activation_fn(x), None
+
+        '''
+        x_int = x / scaling_factor
+        sigmoid_int, sigmoid_scaling_factor = self.sigmoid_approx(x_int, self.k * scaling_factor)
+        x_int = x_int * sigmoid_int
+        scaling_factor = scaling_factor * sigmoid_scaling_factor
+
+        return x_int * scaling_factor, scaling_factor
+        '''
+        sigmoid = self.sigmoid_approx(self.k * x)
+        return x * sigmoid
