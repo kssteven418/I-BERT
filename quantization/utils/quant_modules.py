@@ -385,38 +385,21 @@ class QuantLayerNorm(Module):
                     assert var_int.max() < 2**32
             std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift 
             factor = floor_ste.apply(2**31 / std_int)
-            y_int = floor_ste.apply(y_int * factor / 2**16)
-            scaling_factor = torch.sqrt(n).cuda() / 2**15
-
-            #print(float(std_int.abs().max()), float(y_int.abs().max()))
-            #scaling_factor = 1 / torch.sqrt(var_int) # cast to float
-            #scaling_factor = scaling_factor * torch.sqrt(n) / 2 ** self.shift
+            y_int = floor_ste.apply(y_int * factor / 2)
+            scaling_factor = torch.sqrt(n).cuda() / 2**30
 
             if self.quant_mode == 'symmetric':
                 bias = self.bias.data.detach() / (self.weight.data.detach())
                 bias_int = floor_ste.apply(bias / scaling_factor)
-
-                '''
-            if self.quant_mode == 'symmetric':
-                bias = self.bias.data.detach() / (self.weight.data.detach())
-                bias_scaling_factor = bias.clone() + 1e-5 # bias_int == torch.ones_like(bias)
-                '''
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
 
-            '''
-            # requantize here?
-            x, scaling_factor = self.activation(x, scaling_factor,
-                               identity=bias,
-                               identity_scaling_factor=bias_scaling_factor)
-            '''
-
+            #print(float(y_int.abs().max()), float(bias_int.abs().max()))
             y_int = y_int + bias_int
+            #print(float(y_int.abs().max()))
             scaling_factor = scaling_factor * self.weight
             x = y_int * scaling_factor
-            #x = x * self.weight
 
-            #return x, scaling_factor * self.weight
             return x, scaling_factor
 
 
