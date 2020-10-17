@@ -190,14 +190,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
         if False:
             x = self.activation_fn(x) # TODO, int-only-activation
         else:
-            x = self.activation_fn_approx(x, x_scaling_factor)
+            x, x_scaling_factor = self.activation_fn_approx(x, x_scaling_factor)
         x = self.activation_dropout_module(x)
         #if self.number == 8:
         #    #print('before fc2_act2', float(x.min()), float(x.max()))
         #    pass
 
         # Pre FC2 activation
-        x, x_scaling_factor = self.fc2_act(x) 
+        x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
         #if self.number == 8:
         #    #print('before fc2', float(x.min()), float(x.max()))
         #    pass

@@ -449,8 +449,8 @@ class QuantGELU(Module):
             self.activation_fn = nn.GELU()
 
         self.k = 1.702
-        self.a = -0.1344
-        self.b = -4.94
+        self.a = Parameter(torch.tensor(-0.1344))
+        self.b = Parameter(torch.tensor(-4.94))
         self.c = 4.12 / self.a
         self.shift = 4
         self.clamp = 4
@@ -461,15 +461,14 @@ class QuantGELU(Module):
     def unfix(self):
         self.running_stat = True
 
-    #def sigmoid_approx(self, x_int, scaling_factor):
-    def sigmoid_approx(self, x, scaling_factor):
+    def sigmoid_approx(self, x_int, scaling_factor):
+        b_int = floor_ste.apply(self.b / scaling_factor)
+        self.c = 4.12 / self.a
+        c_int = floor_ste.apply(self.c / scaling_factor ** 2)
         with torch.no_grad():
             clamp_int = torch.floor(self.clamp / scaling_factor)
-            b_int = torch.floor(self.b / scaling_factor)
-            c_int = torch.floor(self.c / scaling_factor ** 2)
             shift_int = torch.floor(self.shift / (scaling_factor ** 2 * self.a))
 
-        x_int = x / scaling_factor
         with torch.no_grad():
             sign = torch.sign(x_int)
         abs_int = torch.abs(x_int)
@@ -481,37 +480,22 @@ class QuantGELU(Module):
         scaling_factor = scaling_factor ** 2 * self.a / 8
         #y = scaling_factor * y_int
         #y = (sign * y + 4) / 8
-        y_int = floor_ste.apply(y_int / 2**16)
-        scaling_factor = scaling_factor * 2**16
-        y = y_int * scaling_factor
+        y_int = floor_ste.apply(y_int / 2**14)
+        scaling_factor = scaling_factor * 2**14
         #print(float(y_int.abs().max()), float(y_int.abs().max()) / 2**31)
         
-        return y
-    """
-        abs_int = torch.abs(x_int)
-        abs_int = torch.min(abs_int, clamp_int)
-        square_int = (abs_int - b_int) ** 2
-        square = square_int * (scaling_factor)**2
-        y = self.a * (square + self.c)
-        '''
-        y_int = square_int + c_int
-        y = y_int * (scaling_factor) ** 2 * self.a
-        #y = -0.1344 * (abs - 4.94) ** 2 + 4.12
-        '''
-        y = (sign * y + 4) / 8
-    """
+        return y_int, scaling_factor
 
     def forward(self, x, scaling_factor=None):
         if self.quant_mode == 'none':
             return self.activation_fn(x), None
 
-        '''
         x_int = x / scaling_factor
         sigmoid_int, sigmoid_scaling_factor = self.sigmoid_approx(x_int, self.k * scaling_factor)
         x_int = x_int * sigmoid_int
         scaling_factor = scaling_factor * sigmoid_scaling_factor
+        #print(float(x_int.abs().max()), float(x_int.abs().max()) / 2**31)
 
         return x_int * scaling_factor, scaling_factor
-        '''
         sigmoid = self.sigmoid_approx(self.k * x, scaling_factor)
         return x * sigmoid
