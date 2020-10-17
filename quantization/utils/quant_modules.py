@@ -449,8 +449,10 @@ class QuantGELU(Module):
             self.activation_fn = nn.GELU()
 
         self.k = 1.702
-        self.a = Parameter(torch.tensor(-0.1344))
-        self.b = Parameter(torch.tensor(-4.94))
+        #self.a = Parameter(torch.tensor(-0.1344))
+        #self.b = Parameter(torch.tensor(-4.94))
+        self.a = -0.1344
+        self.b = -4.94
         self.c = 4.12 / self.a
         self.shift = 4
         self.clamp = 4
@@ -462,10 +464,12 @@ class QuantGELU(Module):
         self.running_stat = True
 
     def sigmoid_approx(self, x_int, scaling_factor):
-        b_int = floor_ste.apply(self.b / scaling_factor)
-        self.c = 4.12 / self.a
-        c_int = floor_ste.apply(self.c / scaling_factor ** 2)
+        #b_int = floor_ste.apply(self.b / scaling_factor)
+        #self.c = 4.12 / self.a
+        #c_int = floor_ste.apply(self.c / scaling_factor ** 2)
         with torch.no_grad():
+            b_int = floor_ste.apply(self.b / scaling_factor)
+            c_int = floor_ste.apply(self.c / scaling_factor ** 2)
             clamp_int = torch.floor(self.clamp / scaling_factor)
             shift_int = torch.floor(self.shift / (scaling_factor ** 2 * self.a))
 
