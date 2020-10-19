@@ -11,6 +11,7 @@ from torch.nn import Module, Parameter
 from .quant_utils import *
 
 from fairseq.modules import LayerNorm
+from fairseq import utils
 
 # The input quantization needs to use symmetric quantization!
 class QuantAct(Module):
@@ -189,8 +190,6 @@ class QuantAct(Module):
 
         return quant_act_int * correct_output_scale, self.act_scaling_factor
 
-#class QuantSoftmax(Module):
-#    def __init__
 
 class QuantLinear(Module):
     """
@@ -498,8 +497,84 @@ class QuantGELU(Module):
         sigmoid_int, sigmoid_scaling_factor = self.sigmoid_approx(x_int, self.k * scaling_factor)
         x_int = x_int * sigmoid_int
         scaling_factor = scaling_factor * sigmoid_scaling_factor
-        #print(float(x_int.abs().max()), float(x_int.abs().max()) / 2**31)
 
         return x_int * scaling_factor, scaling_factor
-        sigmoid = self.sigmoid_approx(self.k * x, scaling_factor)
-        return x * sigmoid
+
+
+class QuantSoftmax(Module):
+    def __init__(self,
+                 output_bit,
+                 onnx_trace,
+                 running_stat=True,
+                 quant_mode='none'):
+        super(QuantSoftmax, self).__init__()
+        self.output_bit = output_bit
+        self.onnx_trace = onnx_trace
+        self.quant_mode = quant_mode
+        self.running_stat = running_stat
+
+        self.xlow = -5.6
+        self.xmid = -2.5
+        self.base_slope = 0.018
+
+        self.slope_mid_factor = 10
+        self.slope_high_factor = 38
+        self.initialize()
+
+    def initialize(self):
+        slope_mid = self.base_slope * self.slope_mid_factor
+        slope_high = self.base_slope * self.slope_high_factor
+
+        y_intercept_mid = self.base_slope * (self.xmid - self.xlow) - slope_mid * self.xmid
+        self.xhigh = (y_intercept_mid - 1) / (slope_high - slope_mid)
+
+        self.x_intercept_low = -self.xlow
+        self.x_intercept_mid = y_intercept_mid / slope_mid
+        self.x_intercept_high = 1 / slope_high
+
+    def fix(self):
+        self.running_stat = False
+
+    def unfix(self):
+        self.running_stat = True
+
+    def exp_segment(self, x_int, scaling_factor):
+        with torch.no_grad():
+            xlow_int = int(self.xlow / scaling_factor)
+            xmid_int = torch.floor(self.xmid / scaling_factor)
+            xhigh_int = torch.floor(self.xhigh / scaling_factor)
+
+            x_intercept_low_int = torch.floor(self.x_intercept_low / scaling_factor)
+            x_intercept_mid_int = torch.floor(self.x_intercept_mid / scaling_factor)
+            x_intercept_high_int = torch.floor(self.x_intercept_high / scaling_factor)
+
+        x_int = torch.clamp(x_int, min=float(xlow_int))
+
+        is_x_high = x_int.gt(xhigh_int)
+        is_x_low = x_int.lt(xmid_int)
+        is_x_mid = (is_x_low | is_x_high).logical_not()
+
+        x_int = (x_int + x_intercept_high_int) * self.slope_high_factor * is_x_high + \
+                (x_int + x_intercept_mid_int) * self.slope_mid_factor * is_x_mid + \
+                (x_int + x_intercept_low_int) * is_x_low
+
+        scaling_factor = scaling_factor * self.base_slope
+
+        return x_int, scaling_factor
+
+    def forward(self, x, scaling_factor):
+        if self.quant_mode == 'none':
+            return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
+
+        x_max, _ = x.max(dim=-1, keepdim=True)
+        x = x - x_max
+        temp = x.masked_fill(x.eq(float('-inf')), 0)
+
+        x_int = x / scaling_factor
+        exp_int, exp_scaling_factor = self.exp_segment(x_int, scaling_factor)
+        exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
+        
+        factor = floor_ste.apply(2**32 / exp_int_sum)
+        exp_int = floor_ste.apply(exp_int * factor / 2**24)
+        scaling_factor = 1 / 2 ** 8
+        return exp_int * scaling_factor, scaling_factor

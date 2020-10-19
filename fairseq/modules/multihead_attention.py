@@ -17,6 +17,7 @@ from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
 from quantization.utils.quant_modules import *
+from quantization.utils.quant_utils import *
 
 @with_incremental_state
 class MultiheadAttention(nn.Module):
@@ -52,6 +53,9 @@ class MultiheadAttention(nn.Module):
         self.vdim = vdim if vdim is not None else embed_dim
         self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
 
+        self.onnx_trace = False
+        self.tpu = False
+
         self.num_heads = num_heads
         self.dropout_module = FairseqDropout(
             dropout, module_name=self.__class__.__name__
@@ -85,6 +89,8 @@ class MultiheadAttention(nn.Module):
         self.v_proj_act = QuantAct(8, quant_mode=self.quant_mode)
         self.q_proj_act = QuantAct(8, quant_mode=self.quant_mode)
 
+        self.softmax = QuantSoftmax(8, self.onnx_trace, quant_mode=self.quant_mode)
+
         self.attn_probs_act = QuantAct(8, quant_mode=self.quant_mode)
         self.attn_act = QuantAct(8, quant_mode=self.quant_mode)
 
@@ -102,8 +108,6 @@ class MultiheadAttention(nn.Module):
 
         self.reset_parameters()
 
-        self.onnx_trace = False
-        self.tpu = False
         self.return_output_scale = return_output_scale
 
     def prepare_for_onnx_export_(self):
@@ -219,33 +223,33 @@ class MultiheadAttention(nn.Module):
             saved_state = None
         
         if self.self_attention:
-            q, q_scale_factor = self.q_proj(query, query_scale)
-            k, k_scale_factor = self.k_proj(query, query_scale)
-            v, v_scale_factor = self.v_proj(query, query_scale)
+            q, q_scaling_factor = self.q_proj(query, query_scale)
+            k, k_scaling_factor = self.k_proj(query, query_scale)
+            v, v_scaling_factor = self.v_proj(query, query_scale)
 
         elif self.encoder_decoder_attention:
             # encoder-decoder attention
-            q, q_scale_factor = self.q_proj(query, query_scale)
+            q, q_scaling_factor = self.q_proj(query, query_scale)
             if key is None:
                 assert value is None
                 k = v = None
             else:
-                k, k_scale_factor = self.k_proj(key, key_scale)
-                v, v_scale_factor = self.v_proj(value, value_scale)
+                k, k_scaling_factor = self.k_proj(key, key_scale)
+                v, v_scaling_factor = self.v_proj(value, value_scale)
 
         else:
             assert key is not None and value is not None
 
-            q, q_scale_factor = self.q_proj(query, query_scale)
-            k, k_scale_factor = self.k_proj(key, key_scale)
-            v, v_scale_factor = self.v_proj(value, value_scale)
+            q, q_scaling_factor = self.q_proj(query, query_scale)
+            k, k_scaling_factor = self.k_proj(key, key_scale)
+            v, v_scaling_factor = self.v_proj(value, value_scale)
 
-        q, q_scale_factor = self.q_proj_act(q, q_scale_factor)
-        k, k_scale_factor = self.k_proj_act(k, k_scale_factor)
-        v, v_scale_factor = self.v_proj_act(v, v_scale_factor)
+        q, q_scaling_factor = self.q_proj_act(q, q_scaling_factor)
+        k, k_scaling_factor = self.k_proj_act(k, k_scaling_factor)
+        v, v_scaling_factor = self.v_proj_act(v, v_scaling_factor)
         q *= self.scaling
-        if q_scale_factor is not None:
-            q_scale_factor = q_scale_factor * self.scaling
+        if q_scaling_factor is not None:
+            q_scaling_factor = q_scaling_factor * self.scaling
 
         if self.bias_k is not None:
             assert self.bias_v is not None
@@ -353,11 +357,11 @@ class MultiheadAttention(nn.Module):
                 )
 
         #print('shape at QK', q.shape, k.transpose(1, 2).shape)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
-        if q_scale_factor is not None:
-            attn_weights_scale_factor = q_scale_factor * k_scale_factor
+        attn_weights = torch.bmm(q, k.transpose(1, 2)) # TODO: integer bmm
+        if q_scaling_factor is not None:
+            attn_weights_scaling_factor = q_scaling_factor * k_scaling_factor
         else:
-            attn_weights_scale_factor = None
+            attn_weights_scaling_factor = None
         attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -385,15 +389,13 @@ class MultiheadAttention(nn.Module):
         if before_softmax:
             return attn_weights, v
 
-        attn_weights_float = utils.softmax(
-            attn_weights, dim=-1, onnx_trace=self.onnx_trace
-        )
+        attn_weights_float, attn_probs_scaling_factor = \
+                self.softmax(attn_weights, attn_weights_scaling_factor)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
-        attn_probs, _ = self.attn_probs_act(attn_probs)
-        attn = torch.bmm(attn_probs, v)
+        attn = torch.bmm(attn_probs, v) # TODO: integer bmm
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
             # when ONNX tracing a single decoder step (sequence length == 1)
