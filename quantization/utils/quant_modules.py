@@ -562,14 +562,29 @@ class QuantSoftmax(Module):
 
         return x_int, scaling_factor
 
+    def exp_lagrange(self, x):
+        coef = [0.0032496,  0.05283179, 0.32077798, 0.88653717, 0.98730899]
+        y = coef[0]
+        for c in coef[1:]:
+            y = y * x + c
+        return y
+
     def forward(self, x, scaling_factor):
         if self.quant_mode == 'none':
             return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
 
         x_max, _ = x.max(dim=-1, keepdim=True)
         x = x - x_max
-        temp = x.masked_fill(x.eq(float('-inf')), 0)
 
+        exp = torch.exp(x)
+        #x = torch.clamp(x, min=-5.6)
+        #exp = self.exp_lagrange(x)
+        exp_sum = exp.sum(dim=-1, keepdim=True)
+        softmax = exp / exp_sum
+
+        return softmax, _
+        
+        '''
         x_int = x / scaling_factor
         exp_int, exp_scaling_factor = self.exp_segment(x_int, scaling_factor)
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
@@ -577,4 +592,5 @@ class QuantSoftmax(Module):
         factor = floor_ste.apply(2**32 / exp_int_sum)
         exp_int = floor_ste.apply(exp_int * factor / 2**24)
         scaling_factor = 1 / 2 ** 8
+        '''
         return exp_int * scaling_factor, scaling_factor
