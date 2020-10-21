@@ -523,10 +523,12 @@ class QuantSoftmax(Module):
         self.initialize()
         ####################################
 
+        self.act = QuantAct(16, quant_mode=self.quant_mode)
         self._coeff = [0.0032496,  0.05283179, 0.32077798, 0.88653717, 0.98730899]
         self.leading_coeff = self._coeff[0]
         self.coeff = [x / self.leading_coeff for x in self._coeff[1:]]
         self.shift = 12
+        self.shift_final = 12
         self.min = -5.6
 
     def initialize(self):
@@ -606,6 +608,8 @@ class QuantSoftmax(Module):
             e_int = torch.floor(e / scaling_factor)
 
         y_int = y_int + e_int
+        #y_int = floor_ste.apply(y_int / 2**self.shift_final)
+        #scaling_factor = scaling_factor * 2**self.shift_final
 
         return y_int, scaling_factor * self.leading_coeff
 
@@ -638,6 +642,8 @@ class QuantSoftmax(Module):
         '''
 
         exp_int, exp_scaling_factor = self.exp_lagrange(x_int, scaling_factor)
+        exp_int, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
+        '''
         exp = exp_int * exp_scaling_factor
         exp_sum = exp.sum(dim=-1, keepdim=True)
         softmax = exp / exp_sum
@@ -645,12 +651,9 @@ class QuantSoftmax(Module):
         return softmax, _
         
         '''
-        x_int = x / scaling_factor
-        exp_int, exp_scaling_factor = self.exp_segment(x_int, scaling_factor)
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
         
         factor = floor_ste.apply(2**32 / exp_int_sum)
         exp_int = floor_ste.apply(exp_int * factor / 2**24)
         scaling_factor = 1 / 2 ** 8
-        '''
         return exp_int * scaling_factor, scaling_factor
