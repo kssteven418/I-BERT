@@ -513,6 +513,7 @@ class QuantSoftmax(Module):
         self.quant_mode = quant_mode
         self.running_stat = running_stat
 
+        '''
         self.act = QuantAct(16, quant_mode=self.quant_mode)
         self._coeff = [0.0032496,  0.05283179, 0.32077798, 0.88653717, 0.98730899]
         self.leading_coeff = self._coeff[0]
@@ -520,6 +521,13 @@ class QuantSoftmax(Module):
         self.shift = 12
         self.shift_final = 12
         self.min = -5.6
+        '''
+
+        self.x0 = -0.6931 # -ln2
+        self._coef = [0.35815147, 0.96963238, 1.]
+        self.leading_coef = self._coef[0]
+        self.coef = [x / self.leading_coef for x in self._coef[1:]]
+
 
     def fix(self):
         self.running_stat = False
@@ -527,51 +535,47 @@ class QuantSoftmax(Module):
     def unfix(self):
         self.running_stat = True
 
-    def exp_lagrange(self, x_int, scaling_factor):
-        x_scaling_factor = scaling_factor
-
-        #TODO: maybe refactor this using loop
+    def polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
-            b, c, d, e = self.coeff
-            b_int = torch.floor(b / scaling_factor)
+            b_int = self.coef[0] / scaling_factor
+            c_int = self.coef[1] / scaling_factor**2
+        z = x_int
+        z = z + b_int
+        z = x_int * z
+        z = z + c_int
+        scaling_factor = self.leading_coef * scaling_factor ** 2
 
-        y_int = x_int + b_int
-        y_int = x_int * y_int
-        scaling_factor = x_scaling_factor ** 2
+        return z * scaling_factor
 
-        with torch.no_grad():
-            c_int = torch.floor(c / scaling_factor)
-        
-        y_int = y_int + c_int
-        y_int = floor_ste.apply(y_int / 2**self.shift)
-        scaling_factor = scaling_factor * 2**self.shift
-
-        y_int = x_int * y_int
-        scaling_factor = scaling_factor * x_scaling_factor
+    def exp_approx(self, x, scaling_factor):
+        x_int = x / scaling_factor
 
         with torch.no_grad():
-            d_int = torch.floor(d / scaling_factor)
-
-        y_int = y_int + d_int
-        y_int = floor_ste.apply(y_int / 2**self.shift)
-        scaling_factor = scaling_factor * 2**self.shift
-
-        y_int = x_int * y_int
-        scaling_factor = scaling_factor * x_scaling_factor
-
-        with torch.no_grad():
-            e_int = torch.floor(e / scaling_factor)
-
-        y_int = y_int + e_int
-        #y_int = floor_ste.apply(y_int / 2**self.shift_final)
-        #scaling_factor = scaling_factor * 2**self.shift_final
-
-        return y_int, scaling_factor * self.leading_coeff
+            x0_int = torch.floor(self.x0 / scaling_factor)
+        m = floor_ste.apply(x_int / x0_int)
+        n = x_int - x0_int * m
+        exp = self.polynomial(n, scaling_factor)
+        exp = exp / 2**m
+        print(m[0][0][:10])
+        print(n[0][0][:10])
+        print()
+        return exp
 
     def forward(self, x, scaling_factor):
         if self.quant_mode == 'none':
             return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
 
+        x_max, _ = x.max(dim=-1, keepdim=True)
+        x = x - x_max
+        x = torch.clamp(x, min=-10)
+
+        #exp = torch.exp(x)
+        exp = self.exp_approx(x, scaling_factor)
+        exp_sum = exp.sum(dim=-1, keepdim=True)
+
+        return exp / exp_sum, None
+
+        '''
         x_int = x / scaling_factor
         with torch.no_grad():
             min_int = torch.floor(self.min / scaling_factor)
@@ -588,3 +592,4 @@ class QuantSoftmax(Module):
         exp_int = floor_ste.apply(exp_int * factor / 2**24)
         scaling_factor = 1 / 2 ** 8
         return exp_int * scaling_factor, scaling_factor
+        '''
