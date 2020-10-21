@@ -513,16 +513,6 @@ class QuantSoftmax(Module):
         self.quant_mode = quant_mode
         self.running_stat = running_stat
 
-        ### followings are to be removed ###
-        self.xlow = -5.6
-        self.xmid = -2.5
-        self.base_slope = 0.018
-
-        self.slope_mid_factor = 10
-        self.slope_high_factor = 38
-        self.initialize()
-        ####################################
-
         self.act = QuantAct(16, quant_mode=self.quant_mode)
         self._coeff = [0.0032496,  0.05283179, 0.32077798, 0.88653717, 0.98730899]
         self.leading_coeff = self._coeff[0]
@@ -531,46 +521,11 @@ class QuantSoftmax(Module):
         self.shift_final = 12
         self.min = -5.6
 
-    def initialize(self):
-        slope_mid = self.base_slope * self.slope_mid_factor
-        slope_high = self.base_slope * self.slope_high_factor
-
-        y_intercept_mid = self.base_slope * (self.xmid - self.xlow) - slope_mid * self.xmid
-        self.xhigh = (y_intercept_mid - 1) / (slope_high - slope_mid)
-
-        self.x_intercept_low = -self.xlow
-        self.x_intercept_mid = y_intercept_mid / slope_mid
-        self.x_intercept_high = 1 / slope_high
-
     def fix(self):
         self.running_stat = False
 
     def unfix(self):
         self.running_stat = True
-
-    def exp_segment(self, x_int, scaling_factor):
-        with torch.no_grad():
-            xlow_int = int(self.xlow / scaling_factor)
-            xmid_int = torch.floor(self.xmid / scaling_factor)
-            xhigh_int = torch.floor(self.xhigh / scaling_factor)
-
-            x_intercept_low_int = torch.floor(self.x_intercept_low / scaling_factor)
-            x_intercept_mid_int = torch.floor(self.x_intercept_mid / scaling_factor)
-            x_intercept_high_int = torch.floor(self.x_intercept_high / scaling_factor)
-
-        x_int = torch.clamp(x_int, min=float(xlow_int))
-
-        is_x_high = x_int.gt(xhigh_int)
-        is_x_low = x_int.lt(xmid_int)
-        is_x_mid = (is_x_low | is_x_high).logical_not()
-
-        x_int = (x_int + x_intercept_high_int) * self.slope_high_factor * is_x_high + \
-                (x_int + x_intercept_mid_int) * self.slope_mid_factor * is_x_mid + \
-                (x_int + x_intercept_low_int) * is_x_low
-
-        scaling_factor = scaling_factor * self.base_slope
-
-        return x_int, scaling_factor
 
     def exp_lagrange(self, x_int, scaling_factor):
         x_scaling_factor = scaling_factor
@@ -625,32 +580,8 @@ class QuantSoftmax(Module):
         x_int = x_int - x_int_max
         x_int = torch.max(x_int, min_int)
 
-        '''
-        x_max, _ = x.max(dim=-1, keepdim=True)
-        x = x - x_max
-
-
-        #temp = x.masked_fill(x.eq(float('-inf')), 0)
-        #x_min = temp.min()
-        #print(scaling_factor)
-        #print(x_min, x_min / scaling_factor)
-
-        #exp = torch.exp(x)
-        x = torch.clamp(x, min=-5.6)
-
-        x_int = x / scaling_factor
-        '''
-
         exp_int, exp_scaling_factor = self.exp_lagrange(x_int, scaling_factor)
         exp_int, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
-        '''
-        exp = exp_int * exp_scaling_factor
-        exp_sum = exp.sum(dim=-1, keepdim=True)
-        softmax = exp / exp_sum
-
-        return softmax, _
-        
-        '''
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
         
         factor = floor_ste.apply(2**32 / exp_int_sum)
