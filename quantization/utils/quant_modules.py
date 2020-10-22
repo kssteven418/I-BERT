@@ -448,11 +448,11 @@ class QuantGELU(Module):
             self.activation_fn = nn.GELU()
 
         self.k = 1.702
-        self.a = -0.1344
-        self.b = -4.94
-        self.c = 4.12 / self.a
-        self.shift = 4
-        self.clamp = 4
+        self.a = -0.2118
+        self.b = -4.26572
+        self.c = 4.25005 / self.a
+        self.shift = 4.25
+        self.clamp = 4.25
 
     def fix(self):
         self.running_stat = False
