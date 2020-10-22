@@ -448,8 +448,6 @@ class QuantGELU(Module):
             self.activation_fn = nn.GELU()
 
         self.k = 1.702
-        #self.a = Parameter(torch.tensor(-0.1344))
-        #self.b = Parameter(torch.tensor(-4.94))
         self.a = -0.1344
         self.b = -4.94
         self.c = 4.12 / self.a
@@ -463,9 +461,6 @@ class QuantGELU(Module):
         self.running_stat = True
 
     def sigmoid_approx(self, x_int, scaling_factor):
-        #b_int = floor_ste.apply(self.b / scaling_factor)
-        #self.c = 4.12 / self.a
-        #c_int = floor_ste.apply(self.c / scaling_factor ** 2)
         with torch.no_grad():
             b_int = floor_ste.apply(self.b / scaling_factor)
             c_int = floor_ste.apply(self.c / scaling_factor ** 2)
@@ -513,17 +508,9 @@ class QuantSoftmax(Module):
         self.quant_mode = quant_mode
         self.running_stat = running_stat
 
-        '''
         self.act = QuantAct(16, quant_mode=self.quant_mode)
-        self._coeff = [0.0032496,  0.05283179, 0.32077798, 0.88653717, 0.98730899]
-        self.leading_coeff = self._coeff[0]
-        self.coeff = [x / self.leading_coeff for x in self._coeff[1:]]
-        self.shift = 12
-        self.shift_final = 12
-        self.min = -5.6
-        '''
-
         self.x0 = -0.6931 # -ln2
+        self.n = 10
         self._coef = [0.35815147, 0.96963238, 1.]
         self.leading_coef = self._coef[0]
         self.coef = [x / self.leading_coef for x in self._coef[1:]]
@@ -537,29 +524,25 @@ class QuantSoftmax(Module):
 
     def polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
-            b_int = self.coef[0] / scaling_factor
-            c_int = self.coef[1] / scaling_factor**2
+            b_int = torch.floor(self.coef[0] / scaling_factor)
+            c_int = torch.floor(self.coef[1] / scaling_factor**2)
         z = x_int
         z = z + b_int
         z = x_int * z
         z = z + c_int
         scaling_factor = self.leading_coef * scaling_factor ** 2
 
-        return z * scaling_factor
+        return z, scaling_factor
 
-    def exp_approx(self, x, scaling_factor):
-        x_int = x / scaling_factor
-
+    def exp_approx(self, x_int, scaling_factor):
         with torch.no_grad():
             x0_int = torch.floor(self.x0 / scaling_factor)
         m = floor_ste.apply(x_int / x0_int)
         n = x_int - x0_int * m
-        exp = self.polynomial(n, scaling_factor)
-        exp = exp / 2**m
-        print(m[0][0][:10])
-        print(n[0][0][:10])
-        print()
-        return exp
+        exp_int, exp_scaling_factor = self.polynomial(n, scaling_factor)
+        exp_int = exp_int * 2 ** (self.n - m)
+        scaling_factor = exp_scaling_factor / 2 ** self.n
+        return exp_int, scaling_factor
 
     def forward(self, x, scaling_factor):
         if self.quant_mode == 'none':
@@ -567,29 +550,17 @@ class QuantSoftmax(Module):
 
         x_max, _ = x.max(dim=-1, keepdim=True)
         x = x - x_max
-        x = torch.clamp(x, min=-10)
+        x = torch.clamp(x, min=self.n*self.x0)
 
-        #exp = torch.exp(x)
-        exp = self.exp_approx(x, scaling_factor)
-        exp_sum = exp.sum(dim=-1, keepdim=True)
-
-        return exp / exp_sum, None
-
-        '''
         x_int = x / scaling_factor
-        with torch.no_grad():
-            min_int = torch.floor(self.min / scaling_factor)
 
-        x_int_max, _ = x_int.max(dim=-1, keepdim=True)
-        x_int = x_int - x_int_max
-        x_int = torch.max(x_int, min_int)
-
-        exp_int, exp_scaling_factor = self.exp_lagrange(x_int, scaling_factor)
-        exp_int, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
+        exp_int, exp_scaling_factor = self.exp_approx(x_int, scaling_factor)
+        exp, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
+        exp_int = exp / exp_scaling_factor
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
-        
+
         factor = floor_ste.apply(2**32 / exp_int_sum)
         exp_int = floor_ste.apply(exp_int * factor / 2**24)
         scaling_factor = 1 / 2 ** 8
         return exp_int * scaling_factor, scaling_factor
-        '''
+
