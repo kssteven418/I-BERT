@@ -396,6 +396,10 @@ class MultiheadAttention(nn.Module):
 
         assert v is not None
         attn = torch.bmm(attn_probs, v) # TODO: integer bmm
+        if q_scaling_factor is not None:
+            attn_scaling_factor = q_scaling_factor * k_scaling_factor
+        else:
+            attn_scaling_factor = None
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
         if self.onnx_trace and attn.size(1) == 1:
             # when ONNX tracing a single decoder step (sequence length == 1)
@@ -404,8 +408,8 @@ class MultiheadAttention(nn.Module):
         else:
             attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
 
-        attn, attn_scale = self.attn_act(attn) #FIXME
-        attn, attn_scale = self.out_proj(attn, attn_scale)
+        attn, attn_scaling_factor = self.attn_act(attn, attn_scaling_factor) #FIXME
+        attn, attn_scaling_factor = self.out_proj(attn, attn_scaling_factor)
 
         attn_weights: Optional[Tensor] = None
 
@@ -420,7 +424,7 @@ class MultiheadAttention(nn.Module):
         if not self.return_output_scale:
             # For compatibility of original codes
             return attn, attn_weights
-        return attn, attn_scale, attn_weights
+        return attn, attn_scaling_factor, attn_weights
 
     @staticmethod
     def _append_prev_key_padding_mask(

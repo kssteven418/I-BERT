@@ -393,46 +393,11 @@ class QuantLayerNorm(Module):
             else:
                 raise Exception('For LN, we only support symmetric quantization.')
 
-            #print(float(y_int.abs().max()), float(bias_int.abs().max()))
             y_int = y_int + bias_int
-            #print(float(y_int.abs().max()))
             scaling_factor = scaling_factor * self.weight
             x = y_int * scaling_factor
 
             return x, scaling_factor
-
-
-class QuantLinearWrapper(Module):
-    """
-    Wrapper class for QuantLinear module.
-    """
-    def __init__(self,
-                 weight_bit,
-                 bias_bit=None,
-                 quant_mode='none',
-                 per_channel=False,
-                 show_flag=False,
-                 weight_percentile=False,
-                 save_path=None,
-                 threshold=None):
-        super(QuantLinearWrapper, self).__init__()
-        self.quant_mode = quant_mode
-        self.prev_act = QuantAct(weight_bit, quant_mode=self.quant_mode)
-        self.linear = QuantLinear(weight_bit, bias_bit,
-                quant_mode, per_channel, show_flag, weight_percentile,
-                save_path, threshold)
-
-    def set_param(self, linear):
-        self.linear.set_param(linear)
-
-    def forward(self, x):
-        if self.quant_mode == 'symmetric':
-            x, scaling_factor = self.prev_act(x)
-            x, scaling_factor = self.linear(x, scaling_factor)
-            return x
-        else:
-            raise NotImplementedError
-
 
 
 class QuantGELU(Module):
@@ -476,11 +441,8 @@ class QuantGELU(Module):
         y_int = sign * y_int + shift_int
 
         scaling_factor = scaling_factor ** 2 * self.a / 8
-        #y = scaling_factor * y_int
-        #y = (sign * y + 4) / 8
         y_int = floor_ste.apply(y_int / 2**14)
         scaling_factor = scaling_factor * 2**14
-        #print(float(y_int.abs().max()), float(y_int.abs().max()) / 2**31)
         
         return y_int, scaling_factor
 
