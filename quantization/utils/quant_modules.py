@@ -436,11 +436,11 @@ class QuantGELU(Module):
             sign = torch.sign(x_int)
         abs_int = torch.abs(x_int)
         abs_int = torch.min(abs_int, clamp_int)
-        abs = abs_int * scaling_factor
         y_int = (abs_int + b_int) ** 2 + c_int
         y_int = sign * y_int + shift_int
 
-        scaling_factor = scaling_factor ** 2 * self.a / 8
+        #scaling_factor = scaling_factor ** 2 * self.a / 8
+        scaling_factor = scaling_factor ** 2 * self.a / (2 * self.shift)
         y_int = floor_ste.apply(y_int / 2**14)
         scaling_factor = scaling_factor * 2**14
         
@@ -472,10 +472,12 @@ class QuantSoftmax(Module):
 
         self.act = QuantAct(16, quant_mode=self.quant_mode)
         self.x0 = -0.6931 # -ln2
-        self.n = 10
+        self.n = 30
         self._coef = [0.35815147, 0.96963238, 1.]
         self.leading_coef = self._coef[0]
         self.coef = [x / self.leading_coef for x in self._coef[1:]]
+
+        self.x_max = torch.zeros(1).cuda()
 
 
     def fix(self):
@@ -499,10 +501,14 @@ class QuantSoftmax(Module):
     def exp_approx(self, x_int, scaling_factor):
         with torch.no_grad():
             x0_int = torch.floor(self.x0 / scaling_factor)
-        m = floor_ste.apply(x_int / x0_int)
-        n = x_int - x0_int * m
-        exp_int, exp_scaling_factor = self.polynomial(n, scaling_factor)
-        exp_int = exp_int * 2 ** (self.n - m)
+        x_int = torch.max(x_int, self.n*x0_int)
+
+        q = floor_ste.apply(x_int / x0_int)
+        r = x_int - x0_int * q
+        #print(q.min(), q.max())
+        exp_int, exp_scaling_factor = self.polynomial(r, scaling_factor)
+        #print(exp_int.max(), exp_int.min())
+        exp_int = torch.clamp(floor_ste.apply(exp_int * 2 ** (self.n - q)), min=0)
         scaling_factor = exp_scaling_factor / 2 ** self.n
         return exp_int, scaling_factor
 
@@ -510,19 +516,45 @@ class QuantSoftmax(Module):
         if self.quant_mode == 'none':
             return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
 
-        x_max, _ = x.max(dim=-1, keepdim=True)
-        x = x - x_max
-        x = torch.clamp(x, min=self.n*self.x0)
+        #q = -x / self.x0
+        #q_max, _ = q.max(dim=-1, keepdim=True)
+        #x_max, _ = x.max(dim=-1, keepdim=True)
+        #print(q_max.max(), q_max.min())
+        #print(x_max.max(), x_max.min())
 
         x_int = x / scaling_factor
 
+        #if self.running_stat:
+        if True:
+            with torch.no_grad():
+                x_max, _ = x_int.max(dim=-1, keepdim=True)
+                #print(x_max.min(), x_max.max())
+                #print(x_max.argmin(), x_max.argmax())
+                #x_max = x_int.max()
+                #self.x_max = torch.max(self.x_max, x_int)
+                self.x_max = x_max
+
+        #x_max, _ = x.max(dim=-1, keepdim=True)
+        #x = x - self.x_max
+        #x = torch.clamp(x, min=self.n*self.x0)
+
+        x_int = x_int - self.x_max
+
+        #print('x min, max', x.min(), x.max())
+        #print('x_int min, max', x_int.min(), x_int.max())
+
         exp_int, exp_scaling_factor = self.exp_approx(x_int, scaling_factor)
+        #print('exp int 1:', torch.isnan(exp_int).sum())
         exp, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
+        #print('exp int 2:', torch.isnan(exp).sum())
         exp_int = exp / exp_scaling_factor
+        #print('exp int 3:', torch.isnan(exp_int).sum())
+        #print(exp_int)
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
 
         factor = floor_ste.apply(2**32 / exp_int_sum)
         exp_int = floor_ste.apply(exp_int * factor / 2**24)
+        #print('exp int 4:', torch.isnan(exp_int).sum())
         scaling_factor = 1 / 2 ** 8
         return exp_int * scaling_factor, scaling_factor
 
