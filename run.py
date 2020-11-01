@@ -50,7 +50,7 @@ def arg_parse():
 
 args = arg_parse()
 os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
-max_epochs = '10'
+max_epochs = '12'
 
 task_specs = {
     'rte' : {
@@ -210,7 +210,7 @@ subprocess_args = [
     '--max-epoch',  max_epochs,
     '--find-unused-parameters',  
     '--best-checkpoint-metric', 'accuracy', 
-    '--quant-mode', args.quant_mode,
+    #'--quant-mode', args.quant_mode,
     '--save-dir', save_dir, '--checkpoint-suffix', checkpoint_suffix,
     '--dropout', str(args.dropout), '--attention-dropout', str(args.dropout),
     ]
