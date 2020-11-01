@@ -146,6 +146,7 @@ lr = spec['lr']
 max_sentences = spec['max_sentences']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
+warm_updates = '0'
 
 if 'max_epochs' in spec:
     max_epochs = spec['max_epochs']
