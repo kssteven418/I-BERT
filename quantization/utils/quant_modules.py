@@ -239,11 +239,11 @@ class QuantLinear(Module):
         self.register_buffer('fc_scaling_factor', torch.zeros(self.out_features))
         self.register_buffer('fc_zero_point', torch.zeros(self.out_features))
         self.register_buffer('weight_integer', torch.zeros_like(self.weight))
-        self.register_buffer('bias_integer', torch.zeros_like(self.weight))
         try:
             self.bias = Parameter(linear.bias.data.clone())
         except AttributeError:
             self.bias = None
+        self.register_buffer('bias_integer', torch.zeros_like(self.bias))
 
     def fix(self):
         self.show_flag = True
