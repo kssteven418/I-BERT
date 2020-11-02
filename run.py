@@ -50,7 +50,7 @@ def arg_parse():
 
 args = arg_parse()
 os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
-max_epochs = '20'
+max_epochs = '12'
 
 task_specs = {
     'rte' : {
