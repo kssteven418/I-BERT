@@ -3,8 +3,6 @@ import subprocess
 import argparse
 from time import gmtime, strftime
 
-ROBERTA_PATH='/rscratch/sehoonkim/models/roberta.base/model.pt'
-
 def arg_parse():
     parser = argparse.ArgumentParser(
         description='This repository contains the PyTorch implementation for the paper ZeroQ: A Novel Zero-Shot Quantization Framework.')
@@ -19,6 +17,7 @@ def arg_parse():
                         default='roberta_base',
                         choices=[
 			    'roberta_base',
+                            'roberta_large',
                         ],
                         help='model architecture')
     parser.add_argument('--task',
@@ -43,7 +42,7 @@ def arg_parse():
     parser.add_argument('--restore-file', type=str, default=None,
                         help='finetuning from the given checkpoint')
     parser.add_argument('--reset-lr-scheduler', action='store_true')
-    parser.add_argument('--cuda', type=int, default=0)
+    parser.add_argument('--cuda', type=str, default='0')
 
     args = parser.parse_args()
     return args
@@ -146,7 +145,13 @@ lr = spec['lr']
 max_sentences = spec['max_sentences']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
-warm_updates = '0'
+
+# no warm update for Q.A.finetuing
+if args.quant_mode == 'symmetric':
+    warm_updates = '0'
+
+ROBERTA_PATH = '/rscratch/sehoonkim/models/roberta.large/model.pt' if 'large' in args.arch else \
+               '/rscratch/sehoonkim/models/roberta.base/model.pt'
 
 if 'max_epochs' in spec:
     max_epochs = spec['max_epochs']
@@ -184,7 +189,8 @@ if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
 time = strftime("%m%d-%H%M%S", gmtime())
-checkpoint_suffix = '_lr%s_%s' % (lr, time) if args.checkpoint_suffix is None \
+checkpoint_suffix = '_large' if 'large' in args.arch  else ''
+checkpoint_suffix += '_lr%s_%s' % (lr, time) if args.checkpoint_suffix is None \
                     else args.checkpoint_suffix
 
 print('Hyperparam: lr = %s, dropout = %s, max_epochs = %s' % (str(lr), str(args.dropout), str(max_epochs)),
