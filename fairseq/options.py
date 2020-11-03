@@ -272,6 +272,8 @@ def get_parser(desc, default_task="translation"):
     parser.add_argument('--profile', action='store_true', help='enable autograd profiler emit_nvtx')
     parser.add_argument('--quant-mode', type=str, default='none', choices=['none', 'symmetric', 'asymmetric'],
                         help='quantization mode')
+    parser.add_argument('--log-file', type=str, default='none',
+                        help='logging file')
 
     from fairseq.registry import REGISTRIES
     for registry_name, REGISTRY in REGISTRIES.items():

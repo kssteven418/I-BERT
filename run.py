@@ -3,6 +3,8 @@ import subprocess
 import argparse
 from time import gmtime, strftime
 
+ROBERTA_PATH = 'models'
+
 def arg_parse():
     parser = argparse.ArgumentParser(
         description='This repository contains the PyTorch implementation for the paper ZeroQ: A Novel Zero-Shot Quantization Framework.')
@@ -37,6 +39,8 @@ def arg_parse():
                         help='quantization mode')
     parser.add_argument('--save-dir', type=str, default=None,
                         help='folder name to store checkpoints')
+    parser.add_argument('--log-dir', type=str, default='logs',
+                        help='folder name to store logs')
     parser.add_argument('--checkpoint-suffix', type=str, default=None,
                         help='suffix for checkpoints')
     parser.add_argument('--restore-file', type=str, default=None,
@@ -82,7 +86,6 @@ task_specs = {
         'max_sentences': '32',
         'total_num_updates': '123873',
         'warm_updates': '7432',
-        'max_epochs': '7'
     },
     'qnli' : {
         'task': 'sentence_prediction',
@@ -145,55 +148,55 @@ lr = spec['lr']
 max_sentences = spec['max_sentences']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
+is_large = 'large' in args.arch
 
 # no warm update for Q.A.finetuing
 if args.quant_mode == 'symmetric':
     warm_updates = '0'
 
-ROBERTA_PATH = '/rscratch/sehoonkim/models/roberta.large/model.pt' if 'large' in args.arch else \
-               '/rscratch/sehoonkim/models/roberta.base/model.pt'
-
-if 'max_epochs' in spec:
-    max_epochs = spec['max_epochs']
+ROBERTA_PATH = ROBERTA_PATH + '/roberta.large/model.pt' if is_large \
+        else ROBERTA_PATH + '/roberta.base/model.pt'
 
 finetuning_args = []
 tuning = 'base'
 
+# set learning rate
+if args.lr:
+    lr = str(args.lr)
+
+# reset lr scheduler
 if args.reset_lr_scheduler:
     if args.lr is None:
         raise Exception('please indicate the learning late with --lr')
-    else:
-        lr = str(args.lr)
-    print("LR scheduler reset, lr = %f" % args.lr)
     finetuning_args.append('--reset-lr-scheduler')
 
 if args.restore_file is not None:
     tuning = 'finetuning'
-    if args.restore_file == 'default':
-        args.restore_file = 'checkpoints_best_acc/%s-best.pt' % args.task
+    #if args.restore_file == 'default':
+    #    args.restore_file = 'checkpoints_best_acc/%s-best.pt' % args.task
 
     print("Finetuning from the checkpoint: %s" % args.restore_file)
     finetuning_args.append('--restore-file')
     finetuning_args.append(args.restore_file)
-    #if args.reset_lr_scheduler:
-    #    if args.lr is None:
-    #        raise Exception('please indicate the learning late with --lr')
-    #    else:
-    #        lr = str(args.lr)
-    #    print("LR scheduler reset, lr = %f" % args.lr)
 
 save_dir = 'checkpoints_%s_%s_%s' % (args.task, tuning, args.quant_mode) if args.save_dir is None \
            else args.save_dir
+
 
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
 time = strftime("%m%d-%H%M%S", gmtime())
-checkpoint_suffix = '_large' if 'large' in args.arch  else ''
+checkpoint_suffix = '_large' if is_large else ''
 checkpoint_suffix += '_lr%s_%s' % (lr, time) if args.checkpoint_suffix is None \
                     else args.checkpoint_suffix
 
-print('Hyperparam: lr = %s, dropout = %s, max_epochs = %s' % (str(lr), str(args.dropout), str(max_epochs)),
+log_name = args.task + ('_large_' if is_large else '_base_') \
+          + tuning + ('_%s_%s' % (lr, time)) 
+log_file = args.log_dir + '/' +  log_name
+
+print('Hyperparam: lr = %s, dropout = %s, max_epochs = %s' % \
+        (str(lr), str(args.dropout), str(max_epochs)),
         flush=True)
 
 subprocess_args = [
@@ -219,13 +222,12 @@ subprocess_args = [
     '--best-checkpoint-metric', 'accuracy', 
     '--quant-mode', args.quant_mode,
     '--save-dir', save_dir, '--checkpoint-suffix', checkpoint_suffix,
+    '--log-file', log_file,
     '--dropout', str(args.dropout), '--attention-dropout', str(args.dropout),
     ]
 
 if args.task == 'sts':
     subprocess_args += ['--regression-target', '--best-checkpoint-metric', 'loss']
-    #subprocess_args += ['--regression-target']
-    #subprocess_args.append('--maximize-best-checkpoint-metric')
 else:
     subprocess_args.append('--maximize-best-checkpoint-metric')
 
