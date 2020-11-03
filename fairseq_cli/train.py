@@ -309,7 +309,7 @@ def validate(args, trainer, task, epoch_itr, subsets):
         progress.print(stats, tag=subset, step=trainer.get_num_updates())
         if args.log_file is not None:
             with open(args.log_file, "a") as logfile:
-                logfile.write("Epoch %s: %s" % (str(epoch_itr.epoch), str(stats)))
+                logfile.write("Epoch %s: %s\n" % (str(epoch_itr.epoch), str(stats)))
 
         valid_losses.append(stats[args.best_checkpoint_metric])
     return valid_losses
