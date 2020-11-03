@@ -130,3 +130,9 @@ data-bin/
 
 # Experimental Folder
 experimental/*
+
+*.sw*
+*-bin
+checkpoints*
+**/tags
+dumps
