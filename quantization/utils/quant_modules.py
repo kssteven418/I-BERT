@@ -13,6 +13,90 @@ from .quant_utils import *
 from fairseq.modules import LayerNorm
 from fairseq import utils
 
+class QuantEmbedding(Module):
+    def __init__(self,
+                 weight_bit,
+                 is_positional=False,
+                 momentum=0.95,
+                 quant_mode='none',
+                 per_channel=False,
+                 show_flag=False,
+                 weight_percentile=False):
+        super(QuantEmbedding, self).__init__()
+
+        self.weight_bit = weight_bit
+        self.momentum = momentum
+        self.quant_mode = quant_mode
+        self.per_channel = per_channel
+        self.show_flag = show_flag
+        self.percentile = weight_percentile
+        self.is_positional = is_positional
+
+        if not per_channel:
+            self.register_buffer('x_min', torch.zeros(1))
+            self.register_buffer('x_max', torch.zeros(1))
+            self.register_buffer('act_scaling_factor', torch.zeros(1))
+        else:
+            assert channel_len is not None
+            self.register_buffer('x_min', torch.zeros(channel_len))
+            self.register_buffer('x_max', torch.zeros(channel_len))
+            self.register_buffer('act_scaling_factor', torch.zeros(channel_len))
+
+        if quant_mode == "none":
+            self.act_function = None
+        elif quant_mode == "symmetric":
+            self.act_function = SymmetricQuantFunction.apply
+        elif quant_mode == "asymmetric":
+            self.act_function = AsymmetricQuantFunction.apply
+        else:
+            raise ValueError("unknown quant mode: {}".format(quant_mode))
+                 
+    def set_param(self, embedding):
+        self.num_embeddings = embedding.num_embeddings
+        self.embedding_dim = embedding.embedding_dim
+        self.padding_idx = embedding.padding_idx
+        self.max_norm = embedding.max_norm
+        self.norm_type = embedding.norm_type
+        self.scale_grad_by_freq = embedding.scale_grad_by_freq
+        self.sparse = embedding.sparse
+        self.weight = embedding.weight
+
+        if self.is_positional:
+            if self.padding_idx is not None:
+                self.max_positions = self.num_embeddings - self.padding_idx - 1
+            else:
+                self.max_positions = self.num_embeddings
+
+
+    def forward(self, x, positions=None, incremental_state=None):
+        if self.is_positional:
+            assert (positions is None) or (
+                self.padding_idx is None
+            ), "If positions is pre-computed then padding_idx should not be set."
+
+            if positions is None:
+                if incremental_state is not None:
+                    # positions is the same for every token when decoding a single step
+                    # Without the int() cast, it doesn't work in some cases when exporting to ONNX
+                    positions = torch.zeros(
+                        (1, 1), device=x.device, dtype=x.dtype
+                    ).fill_(int(self.padding_idx + x.size(1)))
+                else:
+                    positions = utils.make_positions(
+                        x, self.padding_idx, onnx_trace=False
+                    )
+            x = positions
+
+        return F.embedding(
+            x,
+            self.weight,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
+
 # The input quantization needs to use symmetric quantization!
 class QuantAct(Module):
     def __init__(self,

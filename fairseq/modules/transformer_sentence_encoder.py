@@ -16,6 +16,7 @@ from fairseq.modules import (
     TransformerSentenceEncoderLayer,
 )
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
+from quantization.utils.quant_modules import *
 
 
 def init_bert_params(module):
@@ -113,12 +114,13 @@ class TransformerSentenceEncoder(nn.Module):
         self.learned_pos_embedding = learned_pos_embedding
         self.traceable = traceable
         self.tpu = False  # whether we're on TPU
+        self.quant_mode = quant_mode
 
-        self.embed_tokens = self.build_embedding(
-            self.vocab_size, self.embedding_dim, self.padding_idx
+        self.embed_tokens = QuantEmbedding(weight_bit=8, quant_mode=self.quant_mode)
+        self.embed_tokens.set_param(
+            nn.Embedding(self.vocab_size, self.embedding_dim, self.padding_idx)
         )
         self.embed_scale = embed_scale
-        self.quant_mode = quant_mode
 
         if q_noise > 0:
             self.quant_noise = apply_quant_noise_(
@@ -129,11 +131,12 @@ class TransformerSentenceEncoder(nn.Module):
         else:
             self.quant_noise = None
 
-        self.segment_embeddings = (
-            nn.Embedding(self.num_segments, self.embedding_dim, padding_idx=None)
-            if self.num_segments > 0
-            else None
-        )
+        self.segment_embeddings = None
+        if self.num_segments > 0:
+            self.segment_embeddings = QuantEmbedding(weight_bit=8, quant_mode=self.quant_mode)
+            self.segment_embeddings.set_param(
+               nn.Embedding(self.num_segments, self.embedding_dim, padding_idx=None) 
+            )
 
         self.embed_positions = (
             PositionalEmbedding(
@@ -141,6 +144,7 @@ class TransformerSentenceEncoder(nn.Module):
                 self.embedding_dim,
                 padding_idx=(self.padding_idx if offset_positions_by_padding else None),
                 learned=self.learned_pos_embedding,
+                quant_mode=self.quant_mode,
             )
             if self.use_position_embeddings
             else None
@@ -243,10 +247,10 @@ class TransformerSentenceEncoder(nn.Module):
         x = self.embed_tokens(tokens)
 
         if self.embed_scale is not None:
-            x *= self.embed_scale
+            x *= self.embed_scale  #scaling
 
         if self.embed_positions is not None:
-            x += self.embed_positions(tokens, positions=positions)
+            x += self.embed_positions(tokens, positions=positions) 
 
         if self.segment_embeddings is not None and segment_labels is not None:
             x += self.segment_embeddings(segment_labels)
@@ -261,7 +265,7 @@ class TransformerSentenceEncoder(nn.Module):
 
         # account for padding while computing the representation
         if padding_mask is not None:
-            x *= 1 - padding_mask.unsqueeze(-1).type_as(x)
+            x *= 1 - padding_mask.unsqueeze(-1).type_as(x) # 0 or 1
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
