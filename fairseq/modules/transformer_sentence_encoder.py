@@ -116,7 +116,8 @@ class TransformerSentenceEncoder(nn.Module):
         self.tpu = False  # whether we're on TPU
         self.quant_mode = quant_mode
 
-        self.embed_tokens = QuantEmbedding(weight_bit=8, quant_mode=self.quant_mode)
+        self.embed_tokens = QuantEmbedding(weight_bit=8, 
+                quant_mode=self.quant_mode, per_channel=True)
         self.embed_tokens.set_param(
             nn.Embedding(self.vocab_size, self.embedding_dim, self.padding_idx)
         )
@@ -133,22 +134,24 @@ class TransformerSentenceEncoder(nn.Module):
 
         self.segment_embeddings = None
         if self.num_segments > 0:
-            self.segment_embeddings = QuantEmbedding(weight_bit=8, quant_mode=self.quant_mode)
+            self.segment_embeddings = QuantEmbedding(weight_bit=8, 
+                    quant_mode=self.quant_mode, per_channel=True)
             self.segment_embeddings.set_param(
                nn.Embedding(self.num_segments, self.embedding_dim, padding_idx=None) 
             )
+            self.segment_embeddings_act = QuantAct(16, quant_mode=self.quant_mode)
 
-        self.embed_positions = (
-            PositionalEmbedding(
-                self.max_seq_len,
-                self.embedding_dim,
-                padding_idx=(self.padding_idx if offset_positions_by_padding else None),
-                learned=self.learned_pos_embedding,
-                quant_mode=self.quant_mode,
-            )
-            if self.use_position_embeddings
-            else None
-        )
+        self.embed_positions = None
+        if self.use_position_embeddings:
+            self.embed_positions = \
+                    PositionalEmbedding(
+                        self.max_seq_len,
+                        self.embedding_dim,
+                        padding_idx=(self.padding_idx if offset_positions_by_padding else None),
+                        learned=self.learned_pos_embedding,
+                        quant_mode=self.quant_mode,
+                    )
+            self.embed_positions_act = QuantAct(16, quant_mode=self.quant_mode)
 
         if self.layerdrop > 0.0:
             self.layers = LayerDropModuleList(p=self.layerdrop)
@@ -173,7 +176,8 @@ class TransformerSentenceEncoder(nn.Module):
         ])
 
         if encoder_normalize_before:
-            self.emb_layer_norm = LayerNorm(self.embedding_dim, export=export)
+            self.emb_layer_norm = QuantLayerNorm(32, quant_mode=self.quant_mode)
+            self.emb_layer_norm.set_param(LayerNorm(self.embedding_dim, export=export))
         else:
             self.emb_layer_norm = None
 
@@ -244,39 +248,50 @@ class TransformerSentenceEncoder(nn.Module):
         if not self.traceable and not self.tpu and not padding_mask.any():
             padding_mask = None
 
-        x = self.embed_tokens(tokens)
+        x, x_scaling_factor = self.embed_tokens(tokens)
 
         if self.embed_scale is not None:
             x *= self.embed_scale  #scaling
+            x_scaling_factor *= self.embed_scale
 
         if self.embed_positions is not None:
-            x += self.embed_positions(tokens, positions=positions) 
+            y, y_scaling_factor = self.embed_positions(tokens, positions=positions) 
+            x, x_scaling_factor = self.embed_positions_act(
+                    x, x_scaling_factor,
+                    identity=y,
+                    identity_scaling_factor=y_scaling_factor
+            )
 
         if self.segment_embeddings is not None and segment_labels is not None:
-            x += self.segment_embeddings(segment_labels)
+            y, y_scaling_factor= self.segment_embeddings(segment_labels)
+            x, x_scaling_factor = self.embed_positions_act(
+                    x, x_scaling_factor,
+                    identity=y,
+                    identity_scaling_factor=y_scaling_factor
+            )
 
         if self.quant_noise is not None:
             x = self.quant_noise(x)
 
         if self.emb_layer_norm is not None:
-            x = self.emb_layer_norm(x)
+            x, x_scaling_factor = self.emb_layer_norm(x, x_scaling_factor)
 
         x = self.dropout_module(x)
 
         # account for padding while computing the representation
         if padding_mask is not None:
-            x *= 1 - padding_mask.unsqueeze(-1).type_as(x) # 0 or 1
+            x *= 1 - padding_mask.unsqueeze(-1).type_as(x) # 0 or 1, int-mul
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
-        scaling_factor = None
+        #scaling_factor = None
 
         inner_states = []
         if not last_state_only:
             inner_states.append(x)
 
         for layer in self.layers:
-            x, scaling_factor, _ = layer(x, scaling_factor, self_attn_padding_mask=padding_mask)
+            x, scaling_factor, _ = layer(x, x_scaling_factor, self_attn_padding_mask=padding_mask)
             if not last_state_only:
                 inner_states.append(x)
 

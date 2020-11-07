@@ -24,7 +24,8 @@ def PositionalEmbedding(
         if padding_idx is not None:
             num_embeddings = num_embeddings + padding_idx + 1
         #m = LearnedPositionalEmbedding(num_embeddings, embedding_dim, padding_idx)
-        m = QuantEmbedding(weight_bit=8, quant_mode=quant_mode, is_positional=True)
+        m = QuantEmbedding(weight_bit=8, quant_mode=quant_mode, 
+                           per_channel=True, is_positional=True)
         m.set_param(nn.Embedding(num_embeddings, embedding_dim, padding_idx))
 
         nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)

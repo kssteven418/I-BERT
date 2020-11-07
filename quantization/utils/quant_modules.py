@@ -28,26 +28,17 @@ class QuantEmbedding(Module):
         self.momentum = momentum
         self.quant_mode = quant_mode
         self.per_channel = per_channel
+        self.per_channel = False
         self.show_flag = show_flag
-        self.percentile = weight_percentile
+        self.weight_percentile = weight_percentile
         self.is_positional = is_positional
 
-        if not per_channel:
-            self.register_buffer('x_min', torch.zeros(1))
-            self.register_buffer('x_max', torch.zeros(1))
-            self.register_buffer('act_scaling_factor', torch.zeros(1))
-        else:
-            assert channel_len is not None
-            self.register_buffer('x_min', torch.zeros(channel_len))
-            self.register_buffer('x_max', torch.zeros(channel_len))
-            self.register_buffer('act_scaling_factor', torch.zeros(channel_len))
-
         if quant_mode == "none":
-            self.act_function = None
+            self.weight_function = None
         elif quant_mode == "symmetric":
-            self.act_function = SymmetricQuantFunction.apply
+            self.weight_function = SymmetricQuantFunction.apply
         elif quant_mode == "asymmetric":
-            self.act_function = AsymmetricQuantFunction.apply
+            self.weight_function = AsymmetricQuantFunction.apply
         else:
             raise ValueError("unknown quant mode: {}".format(quant_mode))
                  
@@ -61,6 +52,14 @@ class QuantEmbedding(Module):
         self.sparse = embedding.sparse
         self.weight = embedding.weight
 
+        if not self.per_channel:
+            dim_scaling_factor = 1
+        else:
+            dim_scaling_factor = self.embedding_dim
+        self.register_buffer('weight_scaling_factor', torch.zeros(dim_scaling_factor))
+        self.register_buffer('weight_zero_point', torch.zeros(dim_scaling_factor))
+        self.register_buffer('weight_integer', torch.zeros_like(self.weight))
+
         if self.is_positional:
             if self.padding_idx is not None:
                 self.max_positions = self.num_embeddings - self.padding_idx - 1
@@ -69,6 +68,32 @@ class QuantEmbedding(Module):
 
 
     def forward(self, x, positions=None, incremental_state=None):
+        if self.quant_mode == 'none':
+            return F.embedding(
+                x,
+                self.weight,
+                self.padding_idx,
+                self.max_norm,
+                self.norm_type,
+                self.scale_grad_by_freq,
+                self.sparse,
+            )
+
+        w = self.weight
+        w_transform = w.data.detach()
+        if self.per_channel:
+            w_min, _ = torch.min(w_transform, dim=0, keepdim=True, out=None)
+            w_max, _ = torch.max(w_transform, dim=0, keepdim=True, out=None)
+        else:
+            w_min = w_transform.min().expand(1)
+            w_max = w_transform.max().expand(1)
+
+        self.weight_scaling_factor = symmetric_linear_quantization_params(
+                    self.weight_bit, w_min, w_max, self.per_channel)
+        self.weight_integer = self.weight_function(
+                    self.weight, self.weight_bit, self.weight_percentile, 
+                    self.weight_scaling_factor)
+
         if self.is_positional:
             assert (positions is None) or (
                 self.padding_idx is None
@@ -87,15 +112,17 @@ class QuantEmbedding(Module):
                     )
             x = positions
 
-        return F.embedding(
+        emb_int = F.embedding(
             x,
-            self.weight,
+            self.weight_integer,
             self.padding_idx,
             self.max_norm,
             self.norm_type,
             self.scale_grad_by_freq,
             self.sparse,
         )
+        return emb_int / self.weight_scaling_factor, self.weight_scaling_factor
+
 
 # The input quantization needs to use symmetric quantization!
 class QuantAct(Module):
