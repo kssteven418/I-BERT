@@ -64,8 +64,9 @@ def safe_round(number, ndigits):
 class AverageMeter(Meter):
     """Computes and stores the average and current value"""
 
-    def __init__(self, round: Optional[int] = None):
+    def __init__(self, round: Optional[int] = None, sum_meter = False):
         self.round = round
+        self.sum_meter = sum_meter
         self.reset()
 
     def reset(self):
@@ -95,12 +96,16 @@ class AverageMeter(Meter):
         self.round = state_dict.get('round', None)
 
     @property
+    def sumall(self):
+        return self.sum
+
+    @property
     def avg(self):
         return self.sum / self.count if self.count > 0 else self.val
 
     @property
     def smoothed_value(self) -> float:
-        val = self.avg
+        val = self.avg if not self.sum_meter else self.sumall
         if self.round is not None and val is not None:
             val = safe_round(val, self.round)
         return val
