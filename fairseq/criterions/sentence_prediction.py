@@ -66,6 +66,9 @@ class SentencePredictionCriterion(FairseqCriterion):
         if not self.regression_target:
             preds = logits.argmax(dim=1)
             logging_output['ncorrect'] = (preds == targets).sum()
+            logging_output['false'] = (preds != targets).sum()
+            logging_output['tp'] = ((preds == 1) & (targets == 1)).sum()
+            logging_output['tn'] = ((preds == 0) & (targets == 0)).sum()
 
         return loss, sample_size, logging_output
 
@@ -83,7 +86,13 @@ class SentencePredictionCriterion(FairseqCriterion):
 
         if len(logging_outputs) > 0 and 'ncorrect' in logging_outputs[0]:
             ncorrect = sum(log.get('ncorrect', 0) for log in logging_outputs)
+            false = sum(log.get('false', 0) for log in logging_outputs)
+            tp = sum(log.get('tp', 0) for log in logging_outputs)
+            tn = sum(log.get('tn', 0) for log in logging_outputs)
             metrics.log_scalar('accuracy', 100.0 * ncorrect / nsentences, nsentences, round=1)
+            metrics.log_scalar('tp', 1. * tp, 1., round=1, sum_meter=True)
+            metrics.log_scalar('tn', 1. * tn, 1., round=1, sum_meter=True)
+            metrics.log_scalar('false', 1. * false, 1., round=1, sum_meter=True)
 
     @staticmethod
     def logging_outputs_can_be_summed() -> bool:

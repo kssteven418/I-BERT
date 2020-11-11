@@ -115,6 +115,7 @@ def log_scalar(
     weight: float = 1,
     priority: int = 10,
     round: Optional[int] = None,
+    sum_meter = False,
 ):
     """Log a scalar value.
 
@@ -128,7 +129,7 @@ def log_scalar(
     """
     for agg in get_active_aggregators():
         if key not in agg:
-            agg.add_meter(key, AverageMeter(round=round), priority)
+            agg.add_meter(key, AverageMeter(round=round, sum_meter=sum_meter), priority)
         agg[key].update(value, weight)
 
 
