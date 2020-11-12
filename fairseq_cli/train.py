@@ -60,6 +60,7 @@ def main(args):
     task = tasks.setup_task(args)
 
     # Load valid dataset (we load training data below, based on the latest checkpoint)
+    print(args.valid_subset)
     for valid_sub_split in args.valid_subset.split(","):
         task.load_dataset(valid_sub_split, combine=False, epoch=1)
 

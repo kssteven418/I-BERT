@@ -149,6 +149,8 @@ max_sentences = spec['max_sentences']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
 is_large = 'large' in args.arch
+valid_subset = 'valid' if args.task != 'mnli' else 'valid,valid1'
+print('valid_subset:',valid_subset)
 
 ROBERTA_PATH = ROBERTA_PATH + '/roberta.large/model.pt' if is_large \
         else ROBERTA_PATH + '/roberta.base/model.pt'
@@ -198,6 +200,7 @@ print('Hyperparam: lr = %s, dropout = %s, max_epochs = %s' % \
 subprocess_args = [
     'fairseq-train', dataset,
     '--restore-file', ROBERTA_PATH,
+    '--valid-subset', valid_subset,
     '--max-positions', '512',
     '--max-sentences', max_sentences,
     '--max-tokens', '4400',
