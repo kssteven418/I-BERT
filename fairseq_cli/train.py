@@ -212,7 +212,8 @@ def train(args, trainer, task, epoch_itr):
 
         end_of_epoch = not itr.has_next()
         valid_losses, should_stop = validate_and_save(
-            args, trainer, task, epoch_itr, valid_subsets, end_of_epoch
+            args, trainer, task, epoch_itr, valid_subsets, end_of_epoch,
+            num_iter=i
         )
 
         if should_stop:
@@ -228,7 +229,7 @@ def train(args, trainer, task, epoch_itr):
     return valid_losses, should_stop
 
 
-def validate_and_save(args, trainer, task, epoch_itr, valid_subsets, end_of_epoch):
+def validate_and_save(args, trainer, task, epoch_itr, valid_subsets, end_of_epoch, num_iter=-1):
     num_updates = trainer.get_num_updates()
     do_save = (
         args.save_interval_updates > 0
@@ -239,7 +240,9 @@ def validate_and_save(args, trainer, task, epoch_itr, valid_subsets, end_of_epoc
     do_validate = (
         (not end_of_epoch and do_save)  # validate during mid-epoch saves
         or (end_of_epoch and epoch_itr.epoch % args.validate_interval == 0)
-        or (args.validate_interval_updates > 0 and num_updates % args.validate_interval_updates == 0)
+        #or (args.validate_interval_updates > 0 and num_updates % args.validate_interval_updates == 0)
+        or (args.validate_interval_updates > 0 and \
+            num_iter > 0 and num_iter % args.validate_interval_updates == 0)
     ) and not args.disable_validation
 
     # Validate

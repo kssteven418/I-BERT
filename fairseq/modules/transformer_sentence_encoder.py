@@ -264,7 +264,7 @@ class TransformerSentenceEncoder(nn.Module):
 
         if self.segment_embeddings is not None and segment_labels is not None:
             y, y_scaling_factor= self.segment_embeddings(segment_labels)
-            x, x_scaling_factor = self.embed_positions_act(
+            x, x_scaling_factor = self.segment_embeddings_act(
                     x, x_scaling_factor,
                     identity=y,
                     identity_scaling_factor=y_scaling_factor

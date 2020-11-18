@@ -121,7 +121,7 @@ class QuantEmbedding(Module):
             self.scale_grad_by_freq,
             self.sparse,
         )
-        return emb_int / self.weight_scaling_factor, self.weight_scaling_factor
+        return emb_int * self.weight_scaling_factor, self.weight_scaling_factor
 
 
 # The input quantization needs to use symmetric quantization!
