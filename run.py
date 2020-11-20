@@ -8,7 +8,13 @@ ROBERTA_PATH = 'models'
 def arg_parse():
     parser = argparse.ArgumentParser(
         description='This repository contains the PyTorch implementation for the paper ZeroQ: A Novel Zero-Shot Quantization Framework.')
+    parser.add_argument('--attn-dropout',
+                        type=float,
+                        default=0.1)
     parser.add_argument('--dropout',
+                        type=float,
+                        default=0.1)
+    parser.add_argument('--weight-decay',
                         type=float,
                         default=0.1)
     parser.add_argument('--lr',
@@ -46,14 +52,17 @@ def arg_parse():
     parser.add_argument('--restore-file', type=str, default=None,
                         help='finetuning from the given checkpoint')
     parser.add_argument('--reset-lr-scheduler', action='store_true')
-    parser.add_argument('--cuda', type=str, default='0')
+    parser.add_argument('--no-save', action='store_true')
+    #parser.add_argument('--cuda', type=str, default='0')
 
     args = parser.parse_args()
     return args
 
 args = arg_parse()
-os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
+#os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
 max_epochs = '12'
+
+######################## Task specs ##########################
 
 task_specs = {
     'rte' : {
@@ -64,7 +73,7 @@ task_specs = {
         'lr': '2e-5',
         'max_sentences': '16',
         'total_num_updates': '2036',
-        'warm_updates': '122'
+        'warm_updates': '122',
     },
     'sst' : {
         'task': 'sentence_prediction',
@@ -86,6 +95,8 @@ task_specs = {
         'max_sentences': '32',
         'total_num_updates': '123873',
         'warm_updates': '7432',
+        'max_epochs': '6',
+        'valid_interval_updates': '3200',
     },
     'qnli' : {
         'task': 'sentence_prediction',
@@ -95,7 +106,9 @@ task_specs = {
         'lr': '1e-5',
         'max_sentences': '32',
         'total_num_updates': '33112',
-        'warm_updates': '1986'
+        'warm_updates': '1986',
+        'max_epochs': '10',
+        'valid_interval_updates': '1700',
     },
     'cola' : {
         'task': 'sentence_prediction',
@@ -115,7 +128,9 @@ task_specs = {
         'lr': '1e-5',
         'max_sentences': '32',
         'total_num_updates': '113272',
-        'warm_updates': '28318'
+        'warm_updates': '28318',
+        'max_epochs': '6',
+        'valid_interval_updates': '3200',
     },
     'mrpc' : {
         'task': 'sentence_prediction',
@@ -149,6 +164,18 @@ max_sentences = spec['max_sentences']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
 is_large = 'large' in args.arch
+valid_subset = 'valid' if args.task != 'mnli' else 'valid,valid1'
+if 'max_epochs' in spec:
+    max_epochs = spec['max_epochs']
+valid_interval_updates = None
+if 'valid_interval_updates' in spec:
+    valid_interval_updates = spec['valid_interval_updates']
+
+
+print('valid_subset:',valid_subset)
+print('valid_interval_updates:', valid_interval_updates)
+
+###############################################################
 
 # no warm update for Q.A.finetuing
 if args.quant_mode == 'symmetric':
@@ -160,48 +187,60 @@ ROBERTA_PATH = ROBERTA_PATH + '/roberta.large/model.pt' if is_large \
 finetuning_args = []
 tuning = 'base'
 
-# set learning rate
+# set learning rate if specified
 if args.lr:
     lr = str(args.lr)
 
-# reset lr scheduler
+# reset lr scheduler if reset_lr_scheduler
 if args.reset_lr_scheduler:
     if args.lr is None:
         raise Exception('please indicate the learning late with --lr')
     finetuning_args.append('--reset-lr-scheduler')
 
+# finetuning if resotre_file is specified
 if args.restore_file is not None:
     tuning = 'finetuning'
-    #if args.restore_file == 'default':
-    #    args.restore_file = 'checkpoints_best_acc/%s-best.pt' % args.task
-
     print("Finetuning from the checkpoint: %s" % args.restore_file)
     finetuning_args.append('--restore-file')
     finetuning_args.append(args.restore_file)
 
+# checkpoint directory
 save_dir = 'checkpoints_%s_%s_%s' % (args.task, tuning, args.quant_mode) if args.save_dir is None \
            else args.save_dir
-
 
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
+date = strftime("%m%d", gmtime())
 time = strftime("%m%d-%H%M%S", gmtime())
 checkpoint_suffix = '_large' if is_large else ''
 checkpoint_suffix += '_lr%s_%s' % (lr, time) if args.checkpoint_suffix is None \
                     else args.checkpoint_suffix
 
-log_name = args.task + ('_large_' if is_large else '_base_') \
-          + tuning + ('_%s_%s' % (lr, time)) 
-log_file = args.log_dir + '/' +  log_name
+log_dir = args.log_dir + '-' + tuning
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+task_log_dir = os.path.join(log_dir, args.task + '-' + ('large' if is_large else 'base'))
+if not os.path.exists(task_log_dir):
+    os.makedirs(task_log_dir)
 
-print('Hyperparam: lr = %s, dropout = %s, max_epochs = %s' % \
-        (str(lr), str(args.dropout), str(max_epochs)),
+hyperparam_dir = 'lr%s_d%s_ad%s_wd%s' % (str(lr), str(args.dropout), 
+    str(args.attn_dropout), str(args.weight_decay))
+hyperparam_dir = os.path.join(task_log_dir, hyperparam_dir)
+if not os.path.exists(hyperparam_dir):
+    os.makedirs(hyperparam_dir)
+
+log_name = time
+log_file = os.path.join(hyperparam_dir, log_name)
+
+print('Hyperparam: lr = %s, dropout = %s, attn_dropout = %s, weight_decay = %s, max_epochs = %s' % \
+        (str(lr), str(args.dropout), str(args.attn_dropout), str(args.weight_decay), str(max_epochs)),
         flush=True)
 
 subprocess_args = [
     'fairseq-train', dataset,
     '--restore-file', ROBERTA_PATH,
+    '--valid-subset', valid_subset,
     '--max-positions', '512',
     '--max-sentences', max_sentences,
     '--max-tokens', '4400',
@@ -212,7 +251,7 @@ subprocess_args = [
     '--arch',  args.arch,
     '--criterion', criterion,
     '--num-classes', num_classes,
-    '--weight-decay', '0.1', 
+    '--weight-decay', str(args.weight_decay), 
     '--optimizer', 'adam', '--adam-betas', '(0.9, 0.98)', '--adam-eps', '1e-06',
     '--clip-norm',  '0.0',
     '--lr-scheduler',  'polynomial_decay', '--lr', lr,
@@ -223,8 +262,14 @@ subprocess_args = [
     '--quant-mode', args.quant_mode,
     '--save-dir', save_dir, '--checkpoint-suffix', checkpoint_suffix,
     '--log-file', log_file,
-    '--dropout', str(args.dropout), '--attention-dropout', str(args.dropout),
-    ]
+    '--dropout', str(args.dropout), '--attention-dropout', str(args.attn_dropout),
+]
+if valid_interval_updates is not None:
+    subprocess_args += \
+    ['--validate-interval-updates', valid_interval_updates]
+
+if args.no_save:
+    subprocess_args += ['--no-save']
 
 if args.task == 'sts':
     subprocess_args += ['--regression-target', '--best-checkpoint-metric', 'loss']

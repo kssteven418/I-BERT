@@ -115,6 +115,7 @@ class TransformerSentenceEncoder(nn.Module):
         self.traceable = traceable
         self.tpu = False  # whether we're on TPU
         self.quant_mode = quant_mode
+        print(dropout, attention_dropout, activation_dropout)
 
         self.embed_tokens = QuantEmbedding(weight_bit=8, 
                 quant_mode=self.quant_mode, per_channel=True)
