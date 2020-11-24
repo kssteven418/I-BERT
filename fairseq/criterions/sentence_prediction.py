@@ -69,6 +69,8 @@ class SentencePredictionCriterion(FairseqCriterion):
             logging_output['false'] = (preds != targets).sum()
             logging_output['tp'] = ((preds == 1) & (targets == 1)).sum()
             logging_output['tn'] = ((preds == 0) & (targets == 0)).sum()
+            logging_output['fp'] = ((preds == 1) & (targets == 0)).sum()
+            logging_output['fn'] = ((preds == 0) & (targets == 1)).sum()
 
         return loss, sample_size, logging_output
 
@@ -89,9 +91,13 @@ class SentencePredictionCriterion(FairseqCriterion):
             false = sum(log.get('false', 0) for log in logging_outputs)
             tp = sum(log.get('tp', 0) for log in logging_outputs)
             tn = sum(log.get('tn', 0) for log in logging_outputs)
+            fp = sum(log.get('fp', 0) for log in logging_outputs)
+            fn = sum(log.get('fn', 0) for log in logging_outputs)
             metrics.log_scalar('accuracy', 100.0 * ncorrect / nsentences, nsentences, round=1)
             metrics.log_scalar('tp', 1. * tp, 1., round=1, sum_meter=True)
             metrics.log_scalar('tn', 1. * tn, 1., round=1, sum_meter=True)
+            metrics.log_scalar('fp', 1. * fp, 1., round=1, sum_meter=True)
+            metrics.log_scalar('fn', 1. * fn, 1., round=1, sum_meter=True)
             metrics.log_scalar('false', 1. * false, 1., round=1, sum_meter=True)
 
     @staticmethod

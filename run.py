@@ -72,6 +72,7 @@ task_specs = {
         'num_classes': '2',
         'lr': '2e-5',
         'max_sentences': '16',
+        'max_sentences_large': '8',
         'total_num_updates': '2036',
         'warm_updates': '122',
     },
@@ -82,6 +83,7 @@ task_specs = {
         'num_classes': '2',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences_large': '16',
         'total_num_updates': '20935',
         #'total_num_updates': '35935',
         'warm_updates': '1256'
@@ -105,10 +107,12 @@ task_specs = {
         'num_classes': '2',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences_large': '12',
         'total_num_updates': '33112',
         'warm_updates': '1986',
         'max_epochs': '10',
         'valid_interval_updates': '1700',
+        'valid_interval_updates_large': '4500',
     },
     'cola' : {
         'task': 'sentence_prediction',
@@ -154,6 +158,7 @@ task_specs = {
     },
 }
 
+is_large = 'large' in args.arch
 spec = task_specs[args.task]
 task = spec['task']
 criterion = spec['criterion']
@@ -161,15 +166,19 @@ dataset = spec['dataset']
 num_classes = spec['num_classes']
 lr = spec['lr']
 max_sentences = spec['max_sentences']
+# bsz adjustment for large models
+if is_large and 'max_sentences_large' in spec:
+    max_sentences = spec['max_sentences_large']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
-is_large = 'large' in args.arch
 valid_subset = 'valid' if args.task != 'mnli' else 'valid,valid1'
 if 'max_epochs' in spec:
     max_epochs = spec['max_epochs']
 valid_interval_updates = None
 if 'valid_interval_updates' in spec:
     valid_interval_updates = spec['valid_interval_updates']
+    if is_large and 'valid_interval_updates_large' in spec:
+        valid_interval_updates = spec['valid_interval_updates_large']
 
 
 print('valid_subset:',valid_subset)
