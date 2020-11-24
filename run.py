@@ -52,7 +52,7 @@ def arg_parse():
     return args
 
 args = arg_parse()
-os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
+#os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda)
 max_epochs = '12'
 
 task_specs = {
@@ -84,6 +84,7 @@ task_specs = {
         'num_classes': '3',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences_large': '16',
         'total_num_updates': '123873',
         'warm_updates': '7432',
     },
@@ -114,6 +115,7 @@ task_specs = {
         'num_classes': '2',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences_large': '32',
         'total_num_updates': '113272',
         'warm_updates': '28318'
     },
@@ -139,6 +141,7 @@ task_specs = {
     },
 }
 
+is_large = 'large' in args.arch
 spec = task_specs[args.task]
 task = spec['task']
 criterion = spec['criterion']
@@ -146,11 +149,15 @@ dataset = spec['dataset']
 num_classes = spec['num_classes']
 lr = spec['lr']
 max_sentences = spec['max_sentences']
+if is_large and 'max_sentences_large' in spec:
+    max_sentences = spec['max_sentences_large']
 total_num_updates = spec['total_num_updates']
 warm_updates = spec['warm_updates']
-is_large = 'large' in args.arch
 valid_subset = 'valid' if args.task != 'mnli' else 'valid,valid1'
 print('valid_subset:',valid_subset)
+#if args.task in ['mnli', 'qqp']:
+#    max_epochs = '6'
+
 
 ROBERTA_PATH = ROBERTA_PATH + '/roberta.large/model.pt' if is_large \
         else ROBERTA_PATH + '/roberta.base/model.pt'
