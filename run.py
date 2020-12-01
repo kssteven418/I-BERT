@@ -95,10 +95,12 @@ task_specs = {
         'num_classes': '3',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences_large': '10',
         'total_num_updates': '123873',
         'warm_updates': '7432',
         'max_epochs': '6',
         'valid_interval_updates': '3200',
+        'valid_interval_updates_large': '10000',
     },
     'qnli' : {
         'task': 'sentence_prediction',
@@ -131,10 +133,12 @@ task_specs = {
         'num_classes': '2',
         'lr': '1e-5',
         'max_sentences': '32',
+        'max_sentences': '12',
         'total_num_updates': '113272',
         'warm_updates': '28318',
         'max_epochs': '6',
         'valid_interval_updates': '3200',
+        'valid_interval_updates_large': '8500',
     },
     'mrpc' : {
         'task': 'sentence_prediction',
@@ -214,12 +218,6 @@ if args.restore_file is not None:
     finetuning_args.append(args.restore_file)
 
 # checkpoint directory
-save_dir = 'checkpoints_%s_%s_%s' % (args.task, tuning, args.quant_mode) if args.save_dir is None \
-           else args.save_dir
-
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
-
 date = strftime("%m%d", gmtime())
 time = strftime("%m%d-%H%M%S", gmtime())
 checkpoint_suffix = '_large' if is_large else ''
@@ -233,14 +231,26 @@ task_log_dir = os.path.join(log_dir, args.task + '-' + ('large' if is_large else
 if not os.path.exists(task_log_dir):
     os.makedirs(task_log_dir)
 
-hyperparam_dir = 'lr%s_d%s_ad%s_wd%s' % (str(lr), str(args.dropout), 
-    str(args.attn_dropout), str(args.weight_decay))
+#hyperparam_dir = 'lr%s_d%s_ad%s_wd%s' % (str(lr), str(args.dropout), 
+#    str(args.attn_dropout), str(args.weight_decay))
+hyperparam_dir = 'wd_%s_ad_%s_d_%s_lr_%s' % (str(args.weight_decay), 
+    str(args.attn_dropout), str(args.dropout),  str(lr))
 hyperparam_dir = os.path.join(task_log_dir, hyperparam_dir)
 if not os.path.exists(hyperparam_dir):
     os.makedirs(hyperparam_dir)
 
 log_name = time
 log_file = os.path.join(hyperparam_dir, log_name)
+
+#save_dir = 'checkpoints_%s_%s_%s' % (args.task, tuning, args.quant_mode) if args.save_dir is None \
+if args.no_save:
+    save_dir = 'ckpt'
+else:
+    save_dir = os.path.join(hyperparam_dir, time+'_ckpt')  if args.save_dir is None \
+               else args.save_dir
+
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
 
 print('Hyperparam: lr = %s, dropout = %s, attn_dropout = %s, weight_decay = %s, max_epochs = %s' % \
         (str(lr), str(args.dropout), str(args.attn_dropout), str(args.weight_decay), str(max_epochs)),
@@ -269,7 +279,8 @@ subprocess_args = [
     '--find-unused-parameters',  
     '--best-checkpoint-metric', 'accuracy', 
     '--quant-mode', args.quant_mode,
-    '--save-dir', save_dir, '--checkpoint-suffix', checkpoint_suffix,
+    '--save-dir', save_dir, 
+    #'--checkpoint-suffix', checkpoint_suffix,
     '--log-file', log_file,
     '--dropout', str(args.dropout), '--attention-dropout', str(args.attn_dropout),
 ]
