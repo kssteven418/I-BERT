@@ -367,6 +367,7 @@ class QuantLinear(Module):
         return F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) \
                 * bias_scaling_factor, bias_scaling_factor
 
+
 class IntLayerNorm(Module):
     def __init__(self,
                  output_bit,
@@ -482,9 +483,9 @@ class IntGELU(Module):
             raise ValueError("unknown quant mode: {}".format(quant_mode))
 
         self.k = 1.702
-        self.a = -0.2118
-        self.b = -4.26572
-        self.c = 4.25005 / self.a
+        self.n = 14 # sufficiently large integer
+        self.coeff = [-0.2118, -4.26572, 4.25005] # a(x+b)**2 + c
+        self.coeff[2] /= self.coeff[0]
         self.shift = 4.25
         self.clamp = 4.25
 
@@ -496,10 +497,10 @@ class IntGELU(Module):
 
     def int_erf(self, x_int, scaling_factor):
         with torch.no_grad():
-            b_int = floor_ste.apply(self.b / scaling_factor)
-            c_int = floor_ste.apply(self.c / scaling_factor ** 2)
+            b_int = floor_ste.apply(self.coeff[1] / scaling_factor)
+            c_int = floor_ste.apply(self.coeff[2] / scaling_factor ** 2)
             clamp_int = torch.floor(self.clamp / scaling_factor)
-            shift_int = torch.floor(self.shift / (scaling_factor ** 2 * self.a))
+            shift_int = torch.floor(self.shift / (scaling_factor ** 2 * self.coeff[0]))
 
         with torch.no_grad():
             sign = torch.sign(x_int)
@@ -508,9 +509,9 @@ class IntGELU(Module):
         y_int = (abs_int + b_int) ** 2 + c_int
         y_int = sign * y_int + shift_int
 
-        scaling_factor = scaling_factor ** 2 * self.a / (2 * self.shift)
-        y_int = floor_ste.apply(y_int / 2**14)
-        scaling_factor = scaling_factor * 2**14
+        scaling_factor = scaling_factor ** 2 * self.coeff[0] / (2 * self.shift)
+        y_int = floor_ste.apply(y_int / 2 ** self.n)
+        scaling_factor = scaling_factor * 2 ** self.n
         
         return y_int, scaling_factor
 
@@ -527,6 +528,7 @@ class IntGELU(Module):
         scaling_factor = scaling_factor * sigmoid_scaling_factor
 
         return x_int * scaling_factor, scaling_factor
+
 
 class IntSoftmax(Module):
     def __init__(self,
@@ -594,7 +596,6 @@ class IntSoftmax(Module):
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)
 
         factor = floor_ste.apply(2**32 / exp_int_sum)
-        exp_int = floor_ste.apply(exp_int * factor / 2**24)
-        scaling_factor = 1 / 2 ** 8
+        exp_int = floor_ste.apply(exp_int * factor / 2 ** (32 - self.output_bit))
+        scaling_factor = 1 / 2 ** self.output_bit
         return exp_int * scaling_factor, scaling_factor
-
