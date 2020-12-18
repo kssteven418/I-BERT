@@ -121,6 +121,7 @@ class TransformerSentenceEncoder(nn.Module):
         self.quant_mode = quant_mode
         self.embed_bit = 8
         self.embed_act_bit = 16
+        self.ln_output_bit = 32
 
         logger.info('Dropout {}, attn dropout {}, act dropout {}'.format(
             dropout, attention_dropout, activation_dropout))
@@ -185,7 +186,7 @@ class TransformerSentenceEncoder(nn.Module):
         ])
 
         if encoder_normalize_before:
-            self.emb_layer_norm = QuantLayerNorm(32, quant_mode=self.quant_mode)
+            self.emb_layer_norm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
             self.emb_layer_norm.set_param(LayerNorm(self.embedding_dim, export=export))
         else:
             self.emb_layer_norm = None

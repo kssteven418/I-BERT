@@ -13,6 +13,10 @@ from .quant_utils import *
 from fairseq.modules import LayerNorm
 from fairseq import utils
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class QuantEmbedding(Module):
     def __init__(self,
                  weight_bit,
@@ -192,22 +196,6 @@ class QuantAct(Module):
         self.running_stat = True
         self.show_flag = False
 
-    def i_exp(self, x_min, x_max):
-        if self.running_stat:
-            with torch.no_grad():
-                n = 2 ** (self.activation_bit - 1) - 1
-                self.exponents = torch.zeros_like(self.exponents)
-
-                x_range, _ = torch.max(torch.stack([x_min.abs(), x_max.abs()], dim=1), dim=1)
-                x_range = torch.clamp(x_range, min=1e-8)
-                x_range_min = x_range.min()
-                x_range = x_range / x_range_min
-
-                self.exponents = x_range.log2().ceil()
-                self.global_scaling_factor = x_range_min / n
-
-        return self.global_scaling_factor * (2 ** self.exponents)
-
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
                 identity=None, 
@@ -353,8 +341,6 @@ class QuantLinear(Module):
         assert prev_act_scaling_factor is not None and \
               prev_act_scaling_factor.shape == (1,) 
 
-        #print('x shape @ QuantLinear', x.shape)
-
         w = self.weight
         w_transform = w.data.detach()
         if self.per_channel:
@@ -381,16 +367,17 @@ class QuantLinear(Module):
         return F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) \
                 * bias_scaling_factor, bias_scaling_factor
 
-class QuantLayerNorm(Module):
+class IntLayerNorm(Module):
     def __init__(self,
                  output_bit,
                  running_stat=True,
                  quant_mode='none'):
-        super(QuantLayerNorm, self).__init__()
+        super(IntLayerNorm, self).__init__()
         self.quant_mode = quant_mode
         self.running_stat = running_stat
         self.register_buffer('shift', torch.zeros(1))
         self.output_bit = output_bit
+        self.dim_sqrt = None
 
         self.activation = QuantAct(output_bit, quant_mode=self.quant_mode)
         if quant_mode == "symmetric":
@@ -417,9 +404,10 @@ class QuantLayerNorm(Module):
             y_sq_int = y_int ** 2
             var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
             shift = (torch.log2(torch.sqrt(var_int / 2**32)).ceil()).max()
-            print('Shift adjustment: before,', self.shift)
+            shift_old = self.shift
             self.shift = torch.max(self.shift, shift)
-            print('Shift adjustment: after,', self.shift)
+            logger.info("Dynamic shift adjustment: {} -> {}".format(
+                int(shift_old), int(self.shift)))
 
     def overflow_fallback(self, y_int):
         self.set_shift(y_int)
@@ -440,22 +428,31 @@ class QuantLayerNorm(Module):
         assert self.quant_mode == 'symmetric', \
                 "unsupported quant mode: {}".format(quant_mode)
 
-        n = torch.tensor(x.shape[2], dtype=torch.float) # 768, feature dim
+        if self.dim_sqrt is None:
+            n = torch.tensor(x.shape[2], dtype=torch.float) # feature dim(768)
+            self.dim_sqrt = torch.sqrt(n).cuda()
+
+        # Normalization: computes mean and variance(std)
         x_int = x / scaling_factor
         mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
         y_int = x_int - mean_int
-        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
+        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift) # avoid overflow
         y_sq_int = y_int_shifted ** 2
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+        
+        # overflow handling in training stage
         if self.running_stat:
             if var_int.max() >= 2**32:
                 var_int = self.overflow_fallback(y_int)
                 assert var_int.max() < 2**32
+        
+        # To be replaced with integer-sqrt kernel that produces the same output
         std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift 
         factor = floor_ste.apply(2**31 / std_int)
         y_int = floor_ste.apply(y_int * factor / 2)
-        scaling_factor = torch.sqrt(n).cuda() / 2**30
+        scaling_factor = self.dim_sqrt / 2**30
 
+        # scaling and shifting
         bias = self.bias.data.detach() / (self.weight.data.detach())
         bias_int = floor_ste.apply(bias / scaling_factor)
 
@@ -466,11 +463,11 @@ class QuantLayerNorm(Module):
         return x, scaling_factor
 
 
-class QuantGELU(Module):
+class IntGELU(Module):
     def __init__(self,
                  running_stat=True,
                  quant_mode='none'):
-        super(QuantGELU, self).__init__()
+        super(IntGELU, self).__init__()
         self.register_buffer('input_scaling_factor', torch.ones(1))
         self.quant_mode = quant_mode
         self.running_stat = running_stat
@@ -497,7 +494,7 @@ class QuantGELU(Module):
     def unfix(self):
         self.running_stat = True
 
-    def sigmoid_approx(self, x_int, scaling_factor):
+    def int_erf(self, x_int, scaling_factor):
         with torch.no_grad():
             b_int = floor_ste.apply(self.b / scaling_factor)
             c_int = floor_ste.apply(self.c / scaling_factor ** 2)
@@ -511,7 +508,6 @@ class QuantGELU(Module):
         y_int = (abs_int + b_int) ** 2 + c_int
         y_int = sign * y_int + shift_int
 
-        #scaling_factor = scaling_factor ** 2 * self.a / 8
         scaling_factor = scaling_factor ** 2 * self.a / (2 * self.shift)
         y_int = floor_ste.apply(y_int / 2**14)
         scaling_factor = scaling_factor * 2**14
@@ -526,20 +522,19 @@ class QuantGELU(Module):
                 "unsupported quant mode: {}".format(quant_mode)
 
         x_int = x / scaling_factor
-        sigmoid_int, sigmoid_scaling_factor = self.sigmoid_approx(x_int, self.k * scaling_factor)
+        sigmoid_int, sigmoid_scaling_factor = self.int_erf(x_int, self.k * scaling_factor)
         x_int = x_int * sigmoid_int
         scaling_factor = scaling_factor * sigmoid_scaling_factor
 
         return x_int * scaling_factor, scaling_factor
 
-
-class QuantSoftmax(Module):
+class IntSoftmax(Module):
     def __init__(self,
                  output_bit,
                  onnx_trace,
                  running_stat=True,
                  quant_mode='none'):
-        super(QuantSoftmax, self).__init__()
+        super(IntSoftmax, self).__init__()
         self.output_bit = output_bit
         self.onnx_trace = onnx_trace
         self.quant_mode = quant_mode
@@ -547,11 +542,10 @@ class QuantSoftmax(Module):
 
         self.act = QuantAct(16, quant_mode=self.quant_mode)
         self.x0 = -0.6931 # -ln2
-        self.n = 30
-        self._coef = [0.35815147, 0.96963238, 1.]
-        self.leading_coef = self._coef[0]
-        self.coef = [x / self.leading_coef for x in self._coef[1:]]
-
+        self.n = 30 # sufficiently large integer
+        self.coef = [0.35815147, 0.96963238, 1.] # ax**2 + bx + c
+        self.coef[1] /= self.coef[0]
+        self.coef[2] /= self.coef[0]
 
     def fix(self):
         self.running_stat = False
@@ -559,26 +553,24 @@ class QuantSoftmax(Module):
     def unfix(self):
         self.running_stat = True
 
-    def polynomial(self, x_int, scaling_factor):
+    def int_polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
-            b_int = torch.floor(self.coef[0] / scaling_factor)
-            c_int = torch.floor(self.coef[1] / scaling_factor**2)
-        z = x_int
-        z = z + b_int
+            b_int = torch.floor(self.coef[1] / scaling_factor)
+            c_int = torch.floor(self.coef[2] / scaling_factor ** 2)
+        z = x_int + b_int
         z = x_int * z
         z = z + c_int
-        scaling_factor = self.leading_coef * scaling_factor ** 2
-
+        scaling_factor = self.coef[0] * scaling_factor ** 2
         return z, scaling_factor
 
-    def exp_approx(self, x_int, scaling_factor):
+    def int_exp(self, x_int, scaling_factor):
         with torch.no_grad():
             x0_int = torch.floor(self.x0 / scaling_factor)
-        x_int = torch.max(x_int, self.n*x0_int)
+        x_int = torch.max(x_int, self.n * x0_int)
 
         q = floor_ste.apply(x_int / x0_int)
         r = x_int - x0_int * q
-        exp_int, exp_scaling_factor = self.polynomial(r, scaling_factor)
+        exp_int, exp_scaling_factor = self.int_polynomial(r, scaling_factor)
         exp_int = torch.clamp(floor_ste.apply(exp_int * 2 ** (self.n - q)), min=0)
         scaling_factor = exp_scaling_factor / 2 ** self.n
         return exp_int, scaling_factor
@@ -596,7 +588,7 @@ class QuantSoftmax(Module):
         x_int = x_int - x_int_max
 
 
-        exp_int, exp_scaling_factor = self.exp_approx(x_int, scaling_factor)
+        exp_int, exp_scaling_factor = self.int_exp(x_int, scaling_factor)
         exp, exp_scaling_factor = self.act(exp_int, exp_scaling_factor)
         exp_int = exp / exp_scaling_factor
         exp_int_sum = exp_int.sum(dim=-1, keepdim=True)

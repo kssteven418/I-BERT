@@ -58,7 +58,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # Initialize blocks
         self.activation_fn = utils.get_activation_fn(activation_fn)
-        self.activation_fn_approx = QuantGELU(quant_mode=self.quant_mode)
+        self.activation_fn_approx = IntGELU(quant_mode=self.quant_mode)
 
         self.input_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
@@ -77,7 +77,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.self_attn_layer_norm = QuantLayerNorm(self.ln_output_bit, 
+        self.self_attn_layer_norm = IntLayerNorm(self.ln_output_bit, 
                                                    quant_mode=self.quant_mode)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
@@ -102,7 +102,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        self.final_layer_norm = QuantLayerNorm(self.ln_output_bit, 
+        self.final_layer_norm = IntLayerNorm(self.ln_output_bit, 
                                                quant_mode=self.quant_mode)
         self.final_layer_norm.set_param(final_layer_norm)
 
