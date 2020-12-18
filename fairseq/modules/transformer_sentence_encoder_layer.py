@@ -38,7 +38,6 @@ class TransformerSentenceEncoderLayer(nn.Module):
         qn_block_size: int = 8,
         init_fn: Callable = None,
         quant_mode: str = 'none',
-        number: int = None,
     ) -> None:
         super().__init__()
 
@@ -46,10 +45,11 @@ class TransformerSentenceEncoderLayer(nn.Module):
             init_fn()
 
         self.quant_mode = quant_mode
-        self.number = number
+        self.act_output_bit = 8
+        self.fc_weight_bit = 8
+        self.fc_bias_bit = 32
+        self.ln_bit = 22
         self.ln_output_bit = 32
-        self.cnt = 0
-        self.debug = False
 
         # Initialize parameters
         self.embedding_dim = embedding_dim
@@ -60,7 +60,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.activation_fn = utils.get_activation_fn(activation_fn)
         self.activation_fn_approx = QuantGELU(quant_mode=self.quant_mode)
 
-        self.input_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.input_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
 
         self.self_attn = self.build_self_attention(
             self.embedding_dim,
@@ -73,7 +73,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         # 32bit quantization with the maximum absolute value of 2**21
-        self.pre_self_attn_layer_norn_act = QuantAct(22, quant_mode=self.quant_mode)
+        self.pre_self_attn_layer_norm_act = QuantAct(self.ln_bit, quant_mode=self.quant_mode)
 
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -81,8 +81,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
                                                    quant_mode=self.quant_mode)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
-        self.fc1_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.fc2_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.fc1_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
+        self.fc2_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
 
         self.fc1 = self.build_fc1(
             self.embedding_dim,
@@ -98,7 +98,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         )
 
         # 32bit quantization with the maximum absolute value of 2**21
-        self.pre_final_layer_norn_act = QuantAct(22, quant_mode=self.quant_mode)
+        self.pre_final_layer_norm_act = QuantAct(self.ln_bit, quant_mode=self.quant_mode)
 
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
@@ -107,12 +107,12 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
-        linear = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        linear = QuantLinear(weight_bit=self.fc_weight_bit, bias_bit=self.fc_bias_bit, quant_mode=self.quant_mode, per_channel=True)
         linear.set_param(nn.Linear(input_dim, output_dim))
         return quant_noise(linear, q_noise, qn_block_size)
 
     def build_fc2(self, input_dim, output_dim, q_noise, qn_block_size):
-        linear = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        linear = QuantLinear(weight_bit=self.fc_weight_bit, bias_bit=self.fc_bias_bit, quant_mode=self.quant_mode, per_channel=True)
         linear.set_param(nn.Linear(input_dim, output_dim))
         return quant_noise(linear, q_noise, qn_block_size)
 
@@ -164,7 +164,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # Pre LN1 activation (+ residual addition)
-        x, x_scaling_factor = self.pre_self_attn_layer_norn_act(
+        x, x_scaling_factor = self.pre_self_attn_layer_norm_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)
@@ -182,15 +182,9 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         x, x_scaling_factor = self.activation_fn_approx(x, x_scaling_factor)
         x = self.activation_dropout_module(x)
-        #if self.number == 8:
-        #    #print('before fc2_act2', float(x.min()), float(x.max()))
-        #    pass
 
         # Pre FC2 activation
         x, x_scaling_factor = self.fc2_act(x, x_scaling_factor) 
-        #if self.number == 8:
-        #    #print('before fc2', float(x.min()), float(x.max()))
-        #    pass
 
         # FC2
         x, x_scaling_factor = self.fc2(x, x_scaling_factor)
@@ -198,7 +192,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         x = self.dropout_module(x)
 
         # Pre LN2 activation (+ residual addition)
-        x, x_scaling_factor = self.pre_final_layer_norn_act(
+        x, x_scaling_factor = self.pre_final_layer_norm_act(
                 x, x_scaling_factor,
                 identity=residual,
                 identity_scaling_factor=residual_scaling_factor)

@@ -171,9 +171,8 @@ class TransformerSentenceEncoder(nn.Module):
                 q_noise=q_noise,
                 qn_block_size=qn_block_size,
                 quant_mode = self.quant_mode,
-                number=i,
             )
-            for i in range(num_encoder_layers)
+            for _ in range(num_encoder_layers)
         ])
 
         if encoder_normalize_before:
@@ -216,7 +215,6 @@ class TransformerSentenceEncoder(nn.Module):
         q_noise,
         qn_block_size,
         quant_mode,
-        number
     ):
         return TransformerSentenceEncoderLayer(
             embedding_dim=embedding_dim,
@@ -230,7 +228,6 @@ class TransformerSentenceEncoder(nn.Module):
             q_noise=q_noise,
             qn_block_size=qn_block_size,
             quant_mode=quant_mode,
-            number=number,
         )
 
     def prepare_for_tpu_(self, **kwargs):
