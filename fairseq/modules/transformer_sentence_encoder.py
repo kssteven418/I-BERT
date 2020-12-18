@@ -291,7 +291,6 @@ class TransformerSentenceEncoder(nn.Module):
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
-        #scaling_factor = None
 
         inner_states = []
         if not last_state_only:

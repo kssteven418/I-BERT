@@ -45,7 +45,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             init_fn()
 
         self.quant_mode = quant_mode
-        self.act_output_bit = 8
+        self.act_bit = 8
         self.fc_weight_bit = 8
         self.fc_bias_bit = 32
         self.ln_bit = 22
@@ -60,7 +60,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self.activation_fn = utils.get_activation_fn(activation_fn)
         self.activation_fn_approx = QuantGELU(quant_mode=self.quant_mode)
 
-        self.input_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
+        self.input_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.self_attn = self.build_self_attention(
             self.embedding_dim,
@@ -81,8 +81,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
                                                    quant_mode=self.quant_mode)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
-        self.fc1_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
-        self.fc2_act = QuantAct(self.act_output_bit, quant_mode=self.quant_mode)
+        self.fc1_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.fc2_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.fc1 = self.build_fc1(
             self.embedding_dim,

@@ -42,13 +42,16 @@ class MultiheadAttention(nn.Module):
         qn_block_size=8,
         quant_mode='none',
         return_output_scale=False,
-        number=0,
     ):
         super().__init__()
-        self.number = number
-        self.counting = 0
         self.quant_mode = quant_mode
+
+        self.act_bit = 8
+        self.fc_weight_bit = 8
+        self.fc_bias_bit = 32
         self.embed_dim = embed_dim
+        self.softmax_output_bit = 8
+
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
         self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
@@ -74,28 +77,39 @@ class MultiheadAttention(nn.Module):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
-        k_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
-        v_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
-        q_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        assert not (q_noise != 0 and self.quant_mode != 'none'), \
+                "None zero q_noise is not supported for quantized mode"
+
+        k_proj = QuantLinear(self.fc_weight_bit, bias_bit=self.fc_bias_bit, 
+                             quant_mode=self.quant_mode, per_channel=True)
+        v_proj = QuantLinear(self.fc_weight_bit, bias_bit=self.fc_bias_bit, 
+                             quant_mode=self.quant_mode, per_channel=True)
+        q_proj = QuantLinear(self.fc_weight_bit, bias_bit=self.fc_bias_bit, 
+                             quant_mode=self.quant_mode, per_channel=True)
         k_proj.set_param(nn.Linear(self.kdim, embed_dim, bias=bias))
         v_proj.set_param(nn.Linear(self.vdim, embed_dim, bias=bias))
         q_proj.set_param(nn.Linear(embed_dim, embed_dim, bias=bias))
 
+        # quant_noise does nothing in the quantization mode
         self.k_proj = quant_noise(k_proj, q_noise, qn_block_size)
         self.v_proj = quant_noise(v_proj, q_noise, qn_block_size)
         self.q_proj = quant_noise(q_proj, q_noise, qn_block_size)
 
-        self.k_proj_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.v_proj_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.q_proj_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.k_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.v_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.q_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-        self.softmax = QuantSoftmax(8, self.onnx_trace, quant_mode=self.quant_mode)
+        self.softmax = QuantSoftmax(self.softmax_output_bit, self.onnx_trace, 
+                                    quant_mode=self.quant_mode)
 
-        self.attn_probs_act = QuantAct(8, quant_mode=self.quant_mode)
-        self.attn_act = QuantAct(8, quant_mode=self.quant_mode)
+        self.attn_probs_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.attn_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-        out_proj = QuantLinear(8, bias_bit=32, quant_mode=self.quant_mode, per_channel=True)
+        out_proj = QuantLinear(self.fc_weight_bit, bias_bit=self.fc_bias_bit, 
+                               quant_mode=self.quant_mode, per_channel=True)
         out_proj.set_param(nn.Linear(embed_dim, embed_dim, bias=bias))
+
+        # quant_noise does nothing in the quantization mode
         self.out_proj = quant_noise(out_proj, q_noise, qn_block_size)
 
         if add_bias_kv:
@@ -184,7 +198,7 @@ class MultiheadAttention(nn.Module):
             # A workaround for quantization to work. Otherwise JIT compilation
             # treats bias in linear module as method.
             and not torch.jit.is_scripting()
-            and False # TODO Sehoon change this to selg.quant == 'none'
+            and False
         ):
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
@@ -247,6 +261,7 @@ class MultiheadAttention(nn.Module):
         q, q_scaling_factor = self.q_proj_act(q, q_scaling_factor)
         k, k_scaling_factor = self.k_proj_act(k, k_scaling_factor)
         v, v_scaling_factor = self.v_proj_act(v, v_scaling_factor)
+
         q *= self.scaling
         if q_scaling_factor is not None:
             q_scaling_factor = q_scaling_factor * self.scaling
@@ -286,7 +301,10 @@ class MultiheadAttention(nn.Module):
                 .transpose(0, 1)
             )
 
+        ##################### Not executed in quantization mode ######################
+
         if saved_state is not None:
+            assert self.quant_mode == 'none'
             # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
             if "prev_key" in saved_state:
                 _prev_key = saved_state["prev_key"]
@@ -356,9 +374,11 @@ class MultiheadAttention(nn.Module):
                     dim=1,
                 )
 
-        #print('shape at QK', q.shape, k.transpose(1, 2).shape)
-        attn_weights = torch.bmm(q, k.transpose(1, 2)) # TODO: integer bmm
+        ####################################################################################
+
+        attn_weights = torch.bmm(q, k.transpose(1, 2)) 
         if q_scaling_factor is not None:
+            # attn_weights / attn_weights_scaling_factor is integer
             attn_weights_scaling_factor = q_scaling_factor * k_scaling_factor
         else:
             attn_weights_scaling_factor = None
@@ -395,8 +415,9 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
-        attn = torch.bmm(attn_probs, v) # TODO: integer bmm
+        attn = torch.bmm(attn_probs, v) 
         if q_scaling_factor is not None:
+            # attn / attn_scaling_factor is integer
             attn_scaling_factor = q_scaling_factor * k_scaling_factor
         else:
             attn_scaling_factor = None
@@ -422,7 +443,6 @@ class MultiheadAttention(nn.Module):
                 attn_weights = attn_weights.mean(dim=0)
 
         if not self.return_output_scale:
-            # For compatibility of original codes
             return attn, attn_weights
         return attn, attn_scaling_factor, attn_weights
 

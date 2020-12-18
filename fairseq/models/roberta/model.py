@@ -311,7 +311,6 @@ class RobertaEncoder(FairseqEncoder):
         )
         args.untie_weights_roberta = getattr(args, 'untie_weights_roberta', False)
 
-        #TODO Sehoon Add args.quant_mode here
         self.lm_head = RobertaLMHead(
             embed_dim=args.encoder_embed_dim,
             output_dim=len(dictionary),
