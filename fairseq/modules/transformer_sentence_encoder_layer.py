@@ -38,6 +38,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         qn_block_size: int = 8,
         init_fn: Callable = None,
         quant_mode: str = 'none',
+        force_dequant: str = 'none',
     ) -> None:
         super().__init__()
 
@@ -45,6 +46,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             init_fn()
 
         self.quant_mode = quant_mode
+        self.force_dequant = force_dequant
         self.act_bit = 8
         self.fc_weight_bit = 8
         self.fc_bias_bit = 32
@@ -58,7 +60,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         # Initialize blocks
         self.activation_fn = utils.get_activation_fn(activation_fn)
-        self.activation_fn_approx = IntGELU(quant_mode=self.quant_mode)
+        self.activation_fn_approx = IntGELU(quant_mode=self.quant_mode, force_dequant=self.force_dequant)
 
         self.input_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
@@ -70,6 +72,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             q_noise=q_noise,
             qn_block_size=qn_block_size,
             quant_mode=quant_mode,
+            force_dequant=force_dequant,
         )
 
         # 32bit quantization with the maximum absolute value of 2**21
@@ -78,7 +81,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # layer norm associated with the self attention layer
         self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
         self.self_attn_layer_norm = IntLayerNorm(self.ln_output_bit, 
-                                                   quant_mode=self.quant_mode)
+                                                 quant_mode=self.quant_mode,
+                                                 force_dequant=self.force_dequant)
         self.self_attn_layer_norm.set_param(self_attn_layer_norm)
 
         self.fc1_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
@@ -103,7 +107,8 @@ class TransformerSentenceEncoderLayer(nn.Module):
         # layer norm associated with the position wise feed-forward NN
         final_layer_norm = LayerNorm(self.embedding_dim, export=export)
         self.final_layer_norm = IntLayerNorm(self.ln_output_bit, 
-                                               quant_mode=self.quant_mode)
+                                             quant_mode=self.quant_mode,
+                                             force_dequant=self.force_dequant)
         self.final_layer_norm.set_param(final_layer_norm)
 
     def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
@@ -125,6 +130,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
         q_noise,
         qn_block_size,
         quant_mode,
+        force_dequant,
     ):
         return MultiheadAttention(
             embed_dim,
@@ -134,6 +140,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             q_noise=q_noise,
             qn_block_size=qn_block_size,
             quant_mode=quant_mode,
+            force_dequant=force_dequant,
             return_output_scale=True,
         )
         

@@ -41,10 +41,12 @@ class MultiheadAttention(nn.Module):
         q_noise=0.0,
         qn_block_size=8,
         quant_mode='none',
+        force_dequant='none',
         return_output_scale=False,
     ):
         super().__init__()
         self.quant_mode = quant_mode
+        self.force_dequant = force_dequant
 
         self.act_bit = 8
         self.fc_weight_bit = 8
@@ -100,7 +102,8 @@ class MultiheadAttention(nn.Module):
         self.q_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.softmax = IntSoftmax(self.softmax_output_bit, self.onnx_trace, 
-                                    quant_mode=self.quant_mode)
+                                  quant_mode=self.quant_mode,
+                                  force_dequant=self.force_dequant)
 
         self.attn_probs_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.attn_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)

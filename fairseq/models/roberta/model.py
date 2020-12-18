@@ -307,7 +307,8 @@ class RobertaEncoder(FairseqEncoder):
             activation_fn=args.activation_fn,
             q_noise=args.quant_noise_pq,
             qn_block_size=args.quant_noise_pq_block_size,
-            quant_mode = args.quant_mode
+            quant_mode=args.quant_mode,
+            force_dequant=args.force_dequant,
         )
         args.untie_weights_roberta = getattr(args, 'untie_weights_roberta', False)
 

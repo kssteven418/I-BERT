@@ -372,9 +372,13 @@ class IntLayerNorm(Module):
     def __init__(self,
                  output_bit,
                  running_stat=True,
-                 quant_mode='none'):
+                 quant_mode='none',
+                 force_dequant='none'):
         super(IntLayerNorm, self).__init__()
         self.quant_mode = quant_mode
+        if force_dequant in ['nonlinear', 'layernorm']:
+            logger.info("Force dequantize layernorm")
+            self.quant_mode = 'none'
         self.running_stat = running_stat
         self.register_buffer('shift', torch.zeros(1))
         self.output_bit = output_bit
@@ -467,10 +471,15 @@ class IntLayerNorm(Module):
 class IntGELU(Module):
     def __init__(self,
                  running_stat=True,
-                 quant_mode='none'):
+                 quant_mode='none',
+                 force_dequant='none'):
         super(IntGELU, self).__init__()
         self.register_buffer('input_scaling_factor', torch.ones(1))
         self.quant_mode = quant_mode
+        if force_dequant in ['nonlinear', 'gelu']:
+            logger.info("Force dequantize gelu")
+            self.quant_mode = 'none'
+
         self.running_stat = running_stat
 
         if self.quant_mode == 'none':
@@ -535,11 +544,16 @@ class IntSoftmax(Module):
                  output_bit,
                  onnx_trace,
                  running_stat=True,
-                 quant_mode='none'):
+                 quant_mode='none',
+                 force_dequant='none'):
         super(IntSoftmax, self).__init__()
         self.output_bit = output_bit
         self.onnx_trace = onnx_trace
         self.quant_mode = quant_mode
+        if force_dequant in ['nonlinear', 'softmax']:
+            logger.info("Force dequantize softmax")
+            self.quant_mode = 'none'
+
         self.running_stat = running_stat
 
         self.act = QuantAct(16, quant_mode=self.quant_mode)

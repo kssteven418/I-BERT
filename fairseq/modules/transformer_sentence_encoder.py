@@ -101,7 +101,8 @@ class TransformerSentenceEncoder(nn.Module):
         traceable: bool = False,
         q_noise: float = 0.0,
         qn_block_size: int = 8,
-        quant_mode: str = 'none'
+        quant_mode: str = 'none',
+        force_dequant: str = 'none'
     ) -> None:
 
         super().__init__()
@@ -119,6 +120,7 @@ class TransformerSentenceEncoder(nn.Module):
         self.tpu = False  # whether we're on TPU
 
         self.quant_mode = quant_mode
+        self.force_dequant = force_dequant
         self.embed_bit = 8
         self.embed_act_bit = 16
         self.ln_output_bit = 32
@@ -181,12 +183,14 @@ class TransformerSentenceEncoder(nn.Module):
                 q_noise=q_noise,
                 qn_block_size=qn_block_size,
                 quant_mode = self.quant_mode,
+                force_dequant=self.force_dequant,
             )
             for _ in range(num_encoder_layers)
         ])
 
         if encoder_normalize_before:
-            self.emb_layer_norm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
+            self.emb_layer_norm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode, 
+                                               force_dequant=self.force_dequant)
             self.emb_layer_norm.set_param(LayerNorm(self.embedding_dim, export=export))
         else:
             self.emb_layer_norm = None
@@ -225,6 +229,7 @@ class TransformerSentenceEncoder(nn.Module):
         q_noise,
         qn_block_size,
         quant_mode,
+        force_dequant,
     ):
         return TransformerSentenceEncoderLayer(
             embedding_dim=embedding_dim,
@@ -238,6 +243,7 @@ class TransformerSentenceEncoder(nn.Module):
             q_noise=q_noise,
             qn_block_size=qn_block_size,
             quant_mode=quant_mode,
+            force_dequant=force_dequant
         )
 
     def prepare_for_tpu_(self, **kwargs):

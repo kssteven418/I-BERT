@@ -43,6 +43,9 @@ def arg_parse():
 			    'none', 'symmetric',
                         ],
                         help='quantization mode')
+    parser.add_argument('--force-dequant', type=str, default='none', 
+                        choices=['none', 'gelu', 'layernorm', 'softmax', 'nonlinear'],
+                        help='force dequantize the specific layers')
     parser.add_argument('--save-dir', type=str, default=None,
                         help='folder name to store checkpoints')
     parser.add_argument('--log-dir', type=str, default='logs',
@@ -279,6 +282,7 @@ subprocess_args = [
     '--find-unused-parameters',  
     '--best-checkpoint-metric', 'accuracy', 
     '--quant-mode', args.quant_mode,
+    '--force-dequant', args.force_dequant,
     '--save-dir', save_dir, 
     #'--checkpoint-suffix', checkpoint_suffix,
     '--log-file', log_file,
