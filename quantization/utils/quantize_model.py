@@ -4,7 +4,6 @@ def freeze_model(model):
     """
     freeze the activation range
     """
-    #print(type(model))
     if type(model) in [QuantAct, QuantLinear, QuantLayerNorm, QuantSoftmax]:
         model.fix()
     elif type(model) == nn.Sequential:

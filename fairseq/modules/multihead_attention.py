@@ -429,7 +429,7 @@ class MultiheadAttention(nn.Module):
         else:
             attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
 
-        attn, attn_scaling_factor = self.attn_act(attn, attn_scaling_factor) #FIXME
+        attn, attn_scaling_factor = self.attn_act(attn, attn_scaling_factor) 
         attn, attn_scaling_factor = self.out_proj(attn, attn_scaling_factor)
 
         attn_weights: Optional[Tensor] = None

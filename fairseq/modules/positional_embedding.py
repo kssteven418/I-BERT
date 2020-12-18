@@ -24,7 +24,6 @@ def PositionalEmbedding(
         # LearnedPositionalEmbedding. Move this there for a cleaner implementation.
         if padding_idx is not None:
             num_embeddings = num_embeddings + padding_idx + 1
-        #m = LearnedPositionalEmbedding(num_embeddings, embedding_dim, padding_idx)
         m = QuantEmbedding(weight_bit=embed_bit, quant_mode=quant_mode, 
                            per_channel=True, is_positional=True)
         m.set_param(nn.Embedding(num_embeddings, embedding_dim, padding_idx))
