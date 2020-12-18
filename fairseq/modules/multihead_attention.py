@@ -16,8 +16,8 @@ from fairseq.incremental_decoding_utils import with_incremental_state
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
-from quantization.utils.quant_modules import *
-from quantization.utils.quant_utils import *
+from fairseq.quantization.utils.quant_modules import *
+from fairseq.quantization.utils.quant_utils import *
 
 @with_incremental_state
 class MultiheadAttention(nn.Module):

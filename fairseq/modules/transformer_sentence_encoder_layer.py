@@ -16,7 +16,7 @@ from fairseq.modules import (
 from fairseq.modules.quant_noise import quant_noise
 from fairseq.modules.fairseq_dropout import FairseqDropout
 
-from quantization.utils.quant_modules import *
+from fairseq.quantization.utils.quant_modules import *
 
 class TransformerSentenceEncoderLayer(nn.Module):
     """

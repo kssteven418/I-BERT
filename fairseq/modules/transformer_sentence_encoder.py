@@ -16,7 +16,7 @@ from fairseq.modules import (
     TransformerSentenceEncoderLayer,
 )
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
-from quantization.utils.quant_modules import *
+from fairseq.quantization.utils.quant_modules import *
 
 import logging
 

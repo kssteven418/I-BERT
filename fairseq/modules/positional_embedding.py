@@ -7,7 +7,7 @@ import torch.nn as nn
 from .learned_positional_embedding import LearnedPositionalEmbedding
 from .sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
 
-from quantization.utils.quant_modules import *
+from fairseq.quantization.utils.quant_modules import *
 
 def PositionalEmbedding(
         num_embeddings: int,

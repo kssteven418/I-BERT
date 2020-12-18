@@ -21,7 +21,7 @@ from fairseq.file_io import PathManager
 from fairseq.logging import meters, metrics
 from fairseq.nan_detector import NanDetector
 from fairseq.optim import lr_scheduler
-from quantization.utils.quantize_model import freeze_model, unfreeze_model
+from fairseq.quantization.utils.quantize_model import freeze_model, unfreeze_model
 
 
 logger = logging.getLogger(__name__)
