@@ -18,6 +18,9 @@ from fairseq.modules import (
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 from quantization.utils.quant_modules import *
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def init_bert_params(module):
     """
@@ -114,10 +117,15 @@ class TransformerSentenceEncoder(nn.Module):
         self.learned_pos_embedding = learned_pos_embedding
         self.traceable = traceable
         self.tpu = False  # whether we're on TPU
-        self.quant_mode = quant_mode
-        print(dropout, attention_dropout, activation_dropout)
 
-        self.embed_tokens = QuantEmbedding(weight_bit=8, 
+        self.quant_mode = quant_mode
+        self.embed_bit = 8
+        self.embed_act_bit = 16
+
+        logger.info('Dropout {}, attn dropout {}, act dropout {}'.format(
+            dropout, attention_dropout, activation_dropout))
+
+        self.embed_tokens = QuantEmbedding(weight_bit=self.embed_bit, 
                 quant_mode=self.quant_mode, per_channel=True)
         self.embed_tokens.set_param(
             nn.Embedding(self.vocab_size, self.embedding_dim, self.padding_idx)
@@ -135,12 +143,12 @@ class TransformerSentenceEncoder(nn.Module):
 
         self.segment_embeddings = None
         if self.num_segments > 0:
-            self.segment_embeddings = QuantEmbedding(weight_bit=8, 
+            self.segment_embeddings = QuantEmbedding(weight_bit=self.embed_bit, 
                     quant_mode=self.quant_mode, per_channel=True)
             self.segment_embeddings.set_param(
                nn.Embedding(self.num_segments, self.embedding_dim, padding_idx=None) 
             )
-            self.segment_embeddings_act = QuantAct(16, quant_mode=self.quant_mode)
+            self.segment_embeddings_act = QuantAct(self.embed_act_bit, quant_mode=self.quant_mode)
 
         self.embed_positions = None
         if self.use_position_embeddings:
@@ -151,8 +159,9 @@ class TransformerSentenceEncoder(nn.Module):
                         padding_idx=(self.padding_idx if offset_positions_by_padding else None),
                         learned=self.learned_pos_embedding,
                         quant_mode=self.quant_mode,
+                        embed_bit=self.embed_bit,
                     )
-            self.embed_positions_act = QuantAct(16, quant_mode=self.quant_mode)
+            self.embed_positions_act = QuantAct(self.embed_act_bit, quant_mode=self.quant_mode)
 
         if self.layerdrop > 0.0:
             self.layers = LayerDropModuleList(p=self.layerdrop)
