@@ -10,6 +10,23 @@
 
 --------------------------------------------------------------------------------
 
+# Installation
+You can find more detailed installation guide from the Fairseq repo.
+
+1. Fairseq Installation
+Reference: https://github.com/pytorch/fairseq
+
+
+* [PyTorch](http://pytorch.org/) version >= 1.4.0
+* Python version >= 3.6
+* For training new models, you'll also need an NVIDIA GPU and [NCCL](https://github.com/NVIDIA/nccl)
+* **To install fairseq** and develop locally:
+```bash
+git clone https://github.com/pytorch/fairseq
+cd fairseq
+pip install --editable ./
+```
+
 Fairseq(-py) is a sequence modeling toolkit that allows researchers and
 developers to train custom models for translation, summarization, language
 modeling and other text generation tasks.
