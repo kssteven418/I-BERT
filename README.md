@@ -82,7 +82,7 @@ Checkpoints and validation logs will be stored at `./outputs` directory. You can
 By default, models are trained according to the task-specific hyperparameters specified in [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md). However, you can also specify the hyperparameters with the options (use the option `-h` for more details). 
 
 
-## Task-specific Model Finetuning
+## Quantiation and Quantization-Aware-Finetuning
 
 Now, we come back to `ibert` branch for quantization. 
 ```bash
