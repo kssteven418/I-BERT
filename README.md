@@ -89,7 +89,7 @@ Now, we come back to `ibert` branch for quantization.
 git checkout ibert
 ```
 
-And then run the script. 
+And then run the script. This will first quantize the model and do quantization-aware-finetuning with the learning rate that you specify with the option `--lr {lr}`.
 ```bash
 # In I-BERT (root) directory
 # CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name} \
