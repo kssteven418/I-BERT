@@ -81,7 +81,7 @@ class QuantEmbedding(Module):
                 self.norm_type,
                 self.scale_grad_by_freq,
                 self.sparse,
-            )
+            ), None
 
         assert self.quant_mode == 'symmetric', \
                 "unsupported quant mode: {}".format(quant_mode)
@@ -292,7 +292,7 @@ class QuantLinear(Module):
 
         if self.quant_mode == "none":
             pass
-        if self.quant_mode == "symmetric":
+        elif self.quant_mode == "symmetric":
             self.weight_function = SymmetricQuantFunction.apply
         elif self.quant_mode == "asymmetric":
             raise NotImplementedError("unsupported quant mode: {}".format(quant_mode))
@@ -385,7 +385,9 @@ class IntLayerNorm(Module):
         self.dim_sqrt = None
 
         self.activation = QuantAct(output_bit, quant_mode=self.quant_mode)
-        if quant_mode == "symmetric":
+        if self.quant_mode == "none":
+            pass
+        elif quant_mode == "symmetric":
             self.weight_function = SymmetricQuantFunction.apply
         elif quant_mode == "asymmetric":
             raise NotImplementedError("unsupported quant mode: {}".format(self.quant_mode))
