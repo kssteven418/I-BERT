@@ -1,6 +1,9 @@
-<img width="793" alt="Screen Shot 2020-12-19 at 9 51 50 PM" src="https://user-images.githubusercontent.com/50283958/102689854-d5604e80-4244-11eb-83cd-5d75e76c8d04.png">
+<img width="900" alt="Screen Shot 2020-12-19 at 9 51 50 PM" src="https://user-images.githubusercontent.com/50283958/102689854-d5604e80-4244-11eb-83cd-5d75e76c8d04.png">
 
-# Installation & Requirements
+# I-BERT: Integer-only BERT Quantization
+
+
+## Installation & Requirements
 You can find more detailed installation guides from the Fairseq repo: https://github.com/pytorch/fairseq
 
 **1. Fairseq Installation**
@@ -55,7 +58,7 @@ If the command is run propely, preprocessed datasets will be stored in `I-BERT/{
 Now, you have the models and the datasets ready, so you are ready to run I-BERT!
 
 
-# Task-specific Model Finetuning
+## Task-specific Model Finetuning
 
 Before quantizing the model, you first have to finetune the pre-trained models to a specific downstream task. 
 Although you can finetune the model from the original Fairseq repo, we provide `ibert-base` branch where you can train non-quantized models without having to install the original Fairseq. 
@@ -79,7 +82,7 @@ Checkpoints and validation logs will be stored at `./outputs` directory. You can
 By default, models are trained according to the task-specific hyperparameters specified in [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md). However, you can also specify the hyperparameters with the options (use the option `-h` for more details). 
 
 
-# Task-specific Model Finetuning
+## Task-specific Model Finetuning
 
 Now, we come back to `ibert` branch for quantization. 
 ```
@@ -94,3 +97,4 @@ And then run the script.
 CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task RTE --restore-file ckpt-best.pt --lr 1e-6
 ```
 
+**NOTE:** Our work is still on progress. Currently, all integer operations are executed with floating point.
