@@ -1,183 +1,75 @@
-<p align="center">
-  <img src="docs/fairseq_logo.png" width="150">
-  <br />
-  <br />
-  <a href="https://github.com/pytorch/fairseq/blob/master/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
-  <a href="https://github.com/pytorch/fairseq/releases"><img alt="Latest Release" src="https://img.shields.io/github/release/pytorch/fairseq.svg" /></a>
-  <a href="https://github.com/pytorch/fairseq/actions?query=workflow:build"><img alt="Build Status" src="https://github.com/pytorch/fairseq/workflows/build/badge.svg" /></a>
-  <a href="https://fairseq.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/fairseq/badge/?version=latest" /></a>
-</p>
 
---------------------------------------------------------------------------------
+# Installation
+You can find more detailed installation guides from the Fairseq repo: https://github.com/pytorch/fairseq
 
-Fairseq(-py) is a sequence modeling toolkit that allows researchers and
-developers to train custom models for translation, summarization, language
-modeling and other text generation tasks.
-We provide reference implementations of various sequence modeling papers:
+**1. Fairseq Installation**
 
-<details><summary>List of implemented papers</summary><p>
-
-- **Convolutional Neural Networks (CNN)**
-  - [Language Modeling with Gated Convolutional Networks (Dauphin et al., 2017)](examples/language_model/conv_lm/README.md)
-  - [Convolutional Sequence to Sequence Learning (Gehring et al., 2017)](examples/conv_seq2seq/README.md)
-  - [Classical Structured Prediction Losses for Sequence to Sequence Learning (Edunov et al., 2018)](https://github.com/pytorch/fairseq/tree/classic_seqlevel)
-  - [Hierarchical Neural Story Generation (Fan et al., 2018)](examples/stories/README.md)
-  - [wav2vec: Unsupervised Pre-training for Speech Recognition (Schneider et al., 2019)](examples/wav2vec/README.md)
-- **LightConv and DynamicConv models**
-  - [Pay Less Attention with Lightweight and Dynamic Convolutions (Wu et al., 2019)](examples/pay_less_attention_paper/README.md)
-- **Long Short-Term Memory (LSTM) networks**
-  - Effective Approaches to Attention-based Neural Machine Translation (Luong et al., 2015)
-- **Transformer (self-attention) networks**
-  - Attention Is All You Need (Vaswani et al., 2017)
-  - [Scaling Neural Machine Translation (Ott et al., 2018)](examples/scaling_nmt/README.md)
-  - [Understanding Back-Translation at Scale (Edunov et al., 2018)](examples/backtranslation/README.md)
-  - [Adaptive Input Representations for Neural Language Modeling (Baevski and Auli, 2018)](examples/language_model/transformer_lm/README.md)
-  - [Mixture Models for Diverse Machine Translation: Tricks of the Trade (Shen et al., 2019)](examples/translation_moe/README.md)
-  - [RoBERTa: A Robustly Optimized BERT Pretraining Approach (Liu et al., 2019)](examples/roberta/README.md)
-  - [Facebook FAIR's WMT19 News Translation Task Submission (Ng et al., 2019)](examples/wmt19/README.md)
-  - [Jointly Learning to Align and Translate with Transformer Models (Garg et al., 2019)](examples/joint_alignment_translation/README.md )
-  - [Multilingual Denoising Pre-training for Neural Machine Translation (Liu et at., 2020)](examples/mbart/README.md)
-  - [Neural Machine Translation with Byte-Level Subwords (Wang et al., 2020)](examples/byte_level_bpe/README.md)
-  - [Unsupervised Quality Estimation for Neural Machine Translation (Fomicheva et al., 2020)](examples/unsupervised_quality_estimation/README.md)
-  - [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations (Baevski et al., 2020)](examples/wav2vec/README.md)
-- **Non-autoregressive Transformers**
-  - Non-Autoregressive Neural Machine Translation (Gu et al., 2017)
-  - Deterministic Non-Autoregressive Neural Sequence Modeling by Iterative Refinement (Lee et al. 2018)
-  - Insertion Transformer: Flexible Sequence Generation via Insertion Operations (Stern et al. 2019)
-  - Mask-Predict: Parallel Decoding of Conditional Masked Language Models (Ghazvininejad et al., 2019)
-  - [Levenshtein Transformer (Gu et al., 2019)](examples/nonautoregressive_translation/README.md)
-
-</p></details>
-
-### What's New:
-
-- August 2020: [wav2vec2 models and code released](examples/wav2vec/README.md)
-- July 2020: [Unsupervised Quality Estimation code released](examples/unsupervised_quality_estimation/README.md)
-- May 2020: [Follow fairseq on Twitter](https://twitter.com/fairseq)
-- April 2020: [Monotonic Multihead Attention code released](examples/simultaneous_translation/README.md)
-- April 2020: [Quant-Noise code released](examples/quant_noise/README.md)
-- April 2020: [Initial model parallel support and 11B parameters unidirectional LM released](examples/megatron_11b/README.md)
-<details><summary>Previous updates</summary><p>
-
-- March 2020: [Byte-level BPE code released](examples/byte_level_bpe/README.md)
-- February 2020: [mBART model and code released](examples/mbart/README.md)
-- February 2020: [Added tutorial for back-translation](https://github.com/pytorch/fairseq/tree/master/examples/backtranslation#training-your-own-model-wmt18-english-german)
-- December 2019: [fairseq 0.9.0 released](https://github.com/pytorch/fairseq/releases/tag/v0.9.0)
-- November 2019: [VizSeq released (a visual analysis toolkit for evaluating fairseq models)](https://facebookresearch.github.io/vizseq/docs/getting_started/fairseq_example)
-- November 2019: [CamemBERT model and code released](examples/camembert/README.md)
-- November 2019: [BART model and code released](examples/bart/README.md)
-- November 2019: [XLM-R models and code released](examples/xlmr/README.md)
-- September 2019: [Nonautoregressive translation code released](examples/nonautoregressive_translation/README.md)
-- August 2019: [WMT'19 models released](examples/wmt19/README.md)
-- July 2019: fairseq relicensed under MIT license
-- July 2019: [RoBERTa models and code released](examples/roberta/README.md)
-- June 2019: [wav2vec models and code released](examples/wav2vec/README.md)
-
-</p></details>
-
-### Features:
-
-- multi-GPU training on one machine or across multiple machines (data and model parallel)
-- fast generation on both CPU and GPU with multiple search algorithms implemented:
-  - beam search
-  - Diverse Beam Search ([Vijayakumar et al., 2016](https://arxiv.org/abs/1610.02424))
-  - sampling (unconstrained, top-k and top-p/nucleus)
-- large mini-batch training even on a single GPU via delayed updates
-- mixed precision training (trains faster with less GPU memory on [NVIDIA tensor cores](https://developer.nvidia.com/tensor-cores))
-- extensible: easily register new models, criterions, tasks, optimizers and learning rate schedulers
-
-We also provide [pre-trained models for translation and language modeling](#pre-trained-models-and-examples)
-with a convenient `torch.hub` interface:
-```python
-en2de = torch.hub.load('pytorch/fairseq', 'transformer.wmt19.en-de.single_model')
-en2de.translate('Hello world', beam=5)
-# 'Hallo Welt'
-```
-See the PyTorch Hub tutorials for [translation](https://pytorch.org/hub/pytorch_fairseq_translation/)
-and [RoBERTa](https://pytorch.org/hub/pytorch_fairseq_roberta/) for more examples.
-
-# Requirements and Installation
-
+Reference: [Fairseq](https://github.com/pytorch/fairseq)
 * [PyTorch](http://pytorch.org/) version >= 1.4.0
 * Python version >= 3.6
-* For training new models, you'll also need an NVIDIA GPU and [NCCL](https://github.com/NVIDIA/nccl)
-* **To install fairseq** and develop locally:
+* Currently, iBERT only supports training on GPU
+
 ```bash
-git clone https://github.com/pytorch/fairseq
-cd fairseq
+git clone https://github.com/kssteven418/iBERT.git
+cd iBERT
 pip install --editable ./
-
-# on MacOS:
-# CFLAGS="-stdlib=libc++" pip install --editable ./
 ```
-* **For faster training** install NVIDIA's [apex](https://github.com/NVIDIA/apex) library:
+
+**2. Download pre-trained RoBERTa models**
+
+Reference: [Fairseq RoBERTa](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.md)
+
+Download pretrained RoBERTa models from the links and unzip them.
+* RoBERTa-Base: [roberta.base.tar.gz](https://dl.fbaipublicfiles.com/fairseq/models/roberta.base.tar.gz)
+* RoBERTa-Large: [roberta.large.tar.gz](https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz)
 ```bash
-git clone https://github.com/NVIDIA/apex
-cd apex
-pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" \
-  --global-option="--deprecated_fused_adam" --global-option="--xentropy" \
-  --global-option="--fast_multihead_attn" ./
+# In iBERT (root) directory
+mkdir models && cd models
+wget {link}
+tar -xvf roberta.{base|large}.tar.gz
 ```
-* **For large datasets** install [PyArrow](https://arrow.apache.org/docs/python/install.html#using-pip): `pip install pyarrow`
-* If you use Docker make sure to increase the shared memory size either with
-`--ipc=host` or `--shm-size` as command line options to `nvidia-docker run`.
 
 
-# Getting Started
+**3. Download GLUE datasets**
 
-The [full documentation](https://fairseq.readthedocs.io/) contains instructions
-for getting started, training new models and extending fairseq with new model
-types and tasks.
+Reference: [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md)
 
-# Pre-trained models and examples
-
-We provide pre-trained models and pre-processed, binarized test sets for several tasks listed below,
-as well as example training and evaluation commands.
-
-- [Translation](examples/translation/README.md): convolutional and transformer models are available
-- [Language Modeling](examples/language_model/README.md): convolutional and transformer models are available
-
-We also have more detailed READMEs to reproduce results from specific papers:
-- [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations (Baevski et al., 2020)](examples/wav2vec/README.md)
-- [Unsupervised Quality Estimation for Neural Machine Translation (Fomicheva et al., 2020)](examples/unsupervised_quality_estimation/README.md)
-- [Training with Quantization Noise for Extreme Model Compression ({Fan*, Stock*} et al., 2020)](examples/quant_noise/README.md)
-- [Neural Machine Translation with Byte-Level Subwords (Wang et al., 2020)](examples/byte_level_bpe/README.md)
-- [Multilingual Denoising Pre-training for Neural Machine Translation (Liu et at., 2020)](examples/mbart/README.md)
-- [Reducing Transformer Depth on Demand with Structured Dropout (Fan et al., 2019)](examples/layerdrop/README.md)
-- [Jointly Learning to Align and Translate with Transformer Models (Garg et al., 2019)](examples/joint_alignment_translation/README.md)
-- [Levenshtein Transformer (Gu et al., 2019)](examples/nonautoregressive_translation/README.md)
-- [Facebook FAIR's WMT19 News Translation Task Submission (Ng et al., 2019)](examples/wmt19/README.md)
-- [RoBERTa: A Robustly Optimized BERT Pretraining Approach (Liu et al., 2019)](examples/roberta/README.md)
-- [wav2vec: Unsupervised Pre-training for Speech Recognition (Schneider et al., 2019)](examples/wav2vec/README.md)
-- [Mixture Models for Diverse Machine Translation: Tricks of the Trade (Shen et al., 2019)](examples/translation_moe/README.md)
-- [Pay Less Attention with Lightweight and Dynamic Convolutions (Wu et al., 2019)](examples/pay_less_attention_paper/README.md)
-- [Understanding Back-Translation at Scale (Edunov et al., 2018)](examples/backtranslation/README.md)
-- [Classical Structured Prediction Losses for Sequence to Sequence Learning (Edunov et al., 2018)](https://github.com/pytorch/fairseq/tree/classic_seqlevel)
-- [Hierarchical Neural Story Generation (Fan et al., 2018)](examples/stories/README.md)
-- [Scaling Neural Machine Translation (Ott et al., 2018)](examples/scaling_nmt/README.md)
-- [Convolutional Sequence to Sequence Learning (Gehring et al., 2017)](examples/conv_seq2seq/README.md)
-- [Language Modeling with Gated Convolutional Networks (Dauphin et al., 2017)](examples/language_model/conv_lm/README.md)
-
-# Join the fairseq community
-
-* Twitter: https://twitter.com/fairseq
-* Facebook page: https://www.facebook.com/groups/fairseq.users
-* Google group: https://groups.google.com/forum/#!forum/fairseq-users
-
-# License
-
-fairseq(-py) is MIT-licensed.
-The license applies to the pre-trained models as well.
-
-# Citation
-
-Please cite as:
-
-```bibtex
-@inproceedings{ott2019fairseq,
-  title = {fairseq: A Fast, Extensible Toolkit for Sequence Modeling},
-  author = {Myle Ott and Sergey Edunov and Alexei Baevski and Angela Fan and Sam Gross and Nathan Ng and David Grangier and Michael Auli},
-  booktitle = {Proceedings of NAACL-HLT 2019: Demonstrations},
-  year = {2019},
-}
+First, download the data from the [GLUE website](https://gluebenchmark.com/tasks). Make sure to download the dataset in iBERT (root) directory.
+```bash
+# In iBERT (root) directory
+wget https://gist.githubusercontent.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e/raw/17b8dd0d724281ed7c3b2aeeda662b92809aadd5/download_glue_data.py
+python download_glue_data.py --data_dir glue_data --tasks all
 ```
+
+Then, preprocess the data. 
+`task_name` can be one of the following: `{ALL, QQP, MNLI, QNLI, MRPC, RTE, STS-B, SST-2, CoLA}` .
+`ALL` will preprocess all the tasks.
+If the command is run propely, preprocessed datasets will be stored in `iBERT/{task_name}-bin`
+```bash
+# In iBERT (root) directory
+./examples/roberta/preprocess_GLUE_tasks.sh glue_data {task_name}
+```
+Now, you have the models and the datasets ready, so you are ready to run iBERT!
+
+
+# Task-specific Model Finetuning
+
+Before quantizing the model, you first have to finetune the pre-trained models to a specific downstream task. 
+Although you can finetune the model from the original Fairseq repo, we provide `ibert-base` branch where you can train non-quantized models without having to install the original Fairseq. 
+This branch is identical to the master branch of the original Fairseq repo, except for some loggings and run scripts that are irrelevant to the functionality.
+If you already have finetuned models, you can skip this part.
+
+Run the following commands to fetch and move to the `ibert-base` branch:
+```bash
+# In iBERT (root) directory
+git fetch
+git checkout -t origin/ibert-base
+```
+
+Then, run the script:
+```
+# In iBERT (root) directory
+CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name}
+```
+By default, checkpoints and validation logs will be stored at `./outputs` directory. You can change this output location by adding the option `--output-dir OUTPUT_DIR`. This command will finetune the model according to the task-specific hyperparameters specified in [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md). However, you can also specify the hyperparameters with the options (use the option `-h` for more details). 
+
