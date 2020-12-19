@@ -53,6 +53,7 @@ def arg_parse():
                                  'CoLA', 'QQP', 'MRPC', 'STS-B',],
                         help='finetuning task')
     parser.add_argument('--quant-mode', type=str,
+                        default='symmetric',
                         choices=['none', 'symmetric',],
                         help='quantization mode')
     parser.add_argument('--force-dequant', type=str, default='none', 
