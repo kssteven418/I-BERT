@@ -73,7 +73,7 @@ git checkout -t origin/ibert-base
 ```
 
 Then, run the script:
-```
+```bash
 # In I-BERT (root) directory
 # CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name}
 CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task RTE
@@ -85,7 +85,7 @@ By default, models are trained according to the task-specific hyperparameters sp
 ## Task-specific Model Finetuning
 
 Now, we come back to `ibert` branch for quantization. 
-```
+```bash
 git checkout ibert
 ```
 
