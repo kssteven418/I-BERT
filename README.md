@@ -1,4 +1,4 @@
-
+<img width="793" alt="Screen Shot 2020-12-19 at 9 51 50 PM" src="https://user-images.githubusercontent.com/50283958/102689854-d5604e80-4244-11eb-83cd-5d75e76c8d04.png">
 
 # Installation & Requirements
 You can find more detailed installation guides from the Fairseq repo: https://github.com/pytorch/fairseq
@@ -8,11 +8,11 @@ You can find more detailed installation guides from the Fairseq repo: https://gi
 Reference: [Fairseq](https://github.com/pytorch/fairseq)
 * [PyTorch](http://pytorch.org/) version >= 1.4.0
 * Python version >= 3.6
-* Currently, iBERT only supports training on GPU
+* Currently, I-BERT only supports training on GPU
 
 ```bash
-git clone https://github.com/kssteven418/iBERT.git
-cd iBERT
+git clone https://github.com/kssteven418/I-BERT.git
+cd I-BERT
 pip install --editable ./
 ```
 
@@ -24,7 +24,7 @@ Download pretrained RoBERTa models from the links and unzip them.
 * RoBERTa-Base: [roberta.base.tar.gz](https://dl.fbaipublicfiles.com/fairseq/models/roberta.base.tar.gz)
 * RoBERTa-Large: [roberta.large.tar.gz](https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz)
 ```bash
-# In iBERT (root) directory
+# In I-BERT (root) directory
 mkdir models && cd models
 wget {link}
 tar -xvf roberta.{base|large}.tar.gz
@@ -35,9 +35,9 @@ tar -xvf roberta.{base|large}.tar.gz
 
 Reference: [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md)
 
-First, download the data from the [GLUE website](https://gluebenchmark.com/tasks). Make sure to download the dataset in iBERT (root) directory.
+First, download the data from the [GLUE website](https://gluebenchmark.com/tasks). Make sure to download the dataset in I-BERT (root) directory.
 ```bash
-# In iBERT (root) directory
+# In I-BERT (root) directory
 wget https://gist.githubusercontent.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e/raw/17b8dd0d724281ed7c3b2aeeda662b92809aadd5/download_glue_data.py
 python download_glue_data.py --data_dir glue_data --tasks all
 ```
@@ -45,14 +45,14 @@ python download_glue_data.py --data_dir glue_data --tasks all
 Then, preprocess the data. 
 
 ```bash
-# In iBERT (root) directory
+# In I-BERT (root) directory
 ./examples/roberta/preprocess_GLUE_tasks.sh glue_data {task_name}
 ```
 `task_name` can be one of the following: `{ALL, QQP, MNLI, QNLI, MRPC, RTE, STS-B, SST-2, CoLA}` .
 `ALL` will preprocess all the tasks.
-If the command is run propely, preprocessed datasets will be stored in `iBERT/{task_name}-bin`
+If the command is run propely, preprocessed datasets will be stored in `I-BERT/{task_name}-bin`
 
-Now, you have the models and the datasets ready, so you are ready to run iBERT!
+Now, you have the models and the datasets ready, so you are ready to run I-BERT!
 
 
 # Task-specific Model Finetuning
@@ -64,14 +64,14 @@ If you already have finetuned models, you can skip this part.
 
 Run the following commands to fetch and move to the `ibert-base` branch:
 ```bash
-# In iBERT (root) directory
+# In I-BERT (root) directory
 git fetch
 git checkout -t origin/ibert-base
 ```
 
 Then, run the script:
 ```
-# In iBERT (root) directory
+# In I-BERT (root) directory
 # CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name}
 CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task RTE
 ```
@@ -86,4 +86,11 @@ Now, we come back to `ibert` branch for quantization.
 git checkout ibert
 ```
 
+And then run the script. 
+```bash
+# In I-BERT (root) directory
+# CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name} \
+# --restore-file {ckpt_path} --lr {lr}
+CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task RTE --restore-file ckpt-best.pt --lr 1e-6
+```
 
