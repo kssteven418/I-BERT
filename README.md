@@ -1,5 +1,6 @@
 
-# Installation
+
+# Installation & Requirements
 You can find more detailed installation guides from the Fairseq repo: https://github.com/pytorch/fairseq
 
 **1. Fairseq Installation**
@@ -42,13 +43,15 @@ python download_glue_data.py --data_dir glue_data --tasks all
 ```
 
 Then, preprocess the data. 
-`task_name` can be one of the following: `{ALL, QQP, MNLI, QNLI, MRPC, RTE, STS-B, SST-2, CoLA}` .
-`ALL` will preprocess all the tasks.
-If the command is run propely, preprocessed datasets will be stored in `iBERT/{task_name}-bin`
+
 ```bash
 # In iBERT (root) directory
 ./examples/roberta/preprocess_GLUE_tasks.sh glue_data {task_name}
 ```
+`task_name` can be one of the following: `{ALL, QQP, MNLI, QNLI, MRPC, RTE, STS-B, SST-2, CoLA}` .
+`ALL` will preprocess all the tasks.
+If the command is run propely, preprocessed datasets will be stored in `iBERT/{task_name}-bin`
+
 Now, you have the models and the datasets ready, so you are ready to run iBERT!
 
 
@@ -69,7 +72,18 @@ git checkout -t origin/ibert-base
 Then, run the script:
 ```
 # In iBERT (root) directory
-CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name}
+# CUDA_VISIBLE_DEVICES={device} python run.py --arch {roberta_base|roberta_large} --task {task_name}
+CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task RTE
 ```
-By default, checkpoints and validation logs will be stored at `./outputs` directory. You can change this output location by adding the option `--output-dir OUTPUT_DIR`. This command will finetune the model according to the task-specific hyperparameters specified in [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md). However, you can also specify the hyperparameters with the options (use the option `-h` for more details). 
+Checkpoints and validation logs will be stored at `./outputs` directory. You can change this output location by adding the option `--output-dir OUTPUT_DIR`. The exact output location will look something like: `./outputs/none/RTE-base/wd0.1_ad0.1_d0.1_lr2e-5/1219-101427_ckpt/checkpoint_best.pt`.
+By default, models are trained according to the task-specific hyperparameters specified in [Fairseq Finetuning on GLUE](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.glue.md). However, you can also specify the hyperparameters with the options (use the option `-h` for more details). 
+
+
+# Task-specific Model Finetuning
+
+Now, we come back to `ibert` branch for quantization. 
+```
+git checkout ibert
+```
+
 
