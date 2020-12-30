@@ -86,7 +86,7 @@ task_specs = {
         'total_num_updates': '2036',
         'warm_updates': '122',
     },
-    'SST' : {
+    'SST-2' : {
         'dataset': 'SST-2-bin',
         'num_classes': '2',
         'lr': '1e-5',

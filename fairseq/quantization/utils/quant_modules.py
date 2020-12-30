@@ -493,12 +493,10 @@ class IntGELU(Module):
         else:
             raise ValueError("unknown quant mode: {}".format(quant_mode))
 
-        self.k = 1.702
+        self.k = 1.4142
         self.n = 14 # sufficiently large integer
-        self.coeff = [-0.2118, -4.26572, 4.25005] # a(x+b)**2 + c
+        self.coeff = [-0.2888, -1.769, 1] # a(x+b)**2 + c
         self.coeff[2] /= self.coeff[0]
-        self.shift = 4.25
-        self.clamp = 4.25
 
     def fix(self):
         self.running_stat = False
@@ -508,19 +506,16 @@ class IntGELU(Module):
 
     def int_erf(self, x_int, scaling_factor):
         with torch.no_grad():
-            b_int = floor_ste.apply(self.coeff[1] / scaling_factor)
-            c_int = floor_ste.apply(self.coeff[2] / scaling_factor ** 2)
-            clamp_int = torch.floor(self.clamp / scaling_factor)
-            shift_int = torch.floor(self.shift / (scaling_factor ** 2 * self.coeff[0]))
+            b_int = torch.floor(self.coeff[1] / scaling_factor)
+            c_int = torch.floor(self.coeff[2] / scaling_factor ** 2)
 
         with torch.no_grad():
             sign = torch.sign(x_int)
         abs_int = torch.abs(x_int)
-        abs_int = torch.min(abs_int, clamp_int)
+        abs_int = torch.min(abs_int, -b_int)
         y_int = (abs_int + b_int) ** 2 + c_int
-        y_int = sign * y_int + shift_int
-
-        scaling_factor = scaling_factor ** 2 * self.coeff[0] / (2 * self.shift)
+        y_int = sign * y_int
+        scaling_factor = scaling_factor ** 2 * self.coeff[0]
         y_int = floor_ste.apply(y_int / 2 ** self.n)
         scaling_factor = scaling_factor * 2 ** self.n
         
@@ -534,9 +529,12 @@ class IntGELU(Module):
                 "unsupported quant mode: {}".format(quant_mode)
 
         x_int = x / scaling_factor
-        sigmoid_int, sigmoid_scaling_factor = self.int_erf(x_int, self.k * scaling_factor)
-        x_int = x_int * sigmoid_int
-        scaling_factor = scaling_factor * sigmoid_scaling_factor
+        sigmoid_int, sigmoid_scaling_factor = self.int_erf(x_int, scaling_factor / self.k)
+
+        shift_int = torch.floor(1. / sigmoid_scaling_factor)
+
+        x_int = x_int * (sigmoid_int + shift_int)
+        scaling_factor = scaling_factor * sigmoid_scaling_factor / 2
 
         return x_int * scaling_factor, scaling_factor
 
