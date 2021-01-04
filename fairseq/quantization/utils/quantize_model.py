@@ -2,7 +2,7 @@ from fairseq.quantization.utils.quant_modules import *
 
 def freeze_model(model):
     """
-    freeze the activation range
+    freeze the activation range. Resursively invokes layer.fix()
     """
     if type(model) in [QuantAct, QuantLinear, IntLayerNorm, IntSoftmax]:
         model.fix()
@@ -20,7 +20,7 @@ def freeze_model(model):
 
 def unfreeze_model(model):
     """
-    unfreeze the activation range
+    unfreeze the activation range. Resursively invokes layer.unfix()
     """
     if type(model) in [QuantAct, QuantLinear, IntLayerNorm, IntSoftmax]:
         model.unfix()

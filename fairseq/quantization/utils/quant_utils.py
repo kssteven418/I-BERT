@@ -9,6 +9,20 @@ from decimal import Decimal
 import time
 
 def get_percentile_min_max(input, lower_percentile, upper_percentile, output_tensor=False):
+    """
+    Calculate the percentile max and min values in a given tensor
+    
+    Parameters:
+    ----------
+    input: tensor
+        the tensor to calculate percentile max and min
+    lower_percentile: float
+        if 0.1, means we return the value of the smallest 0.1% value in the tensor as percentile min
+    upper_percentile: float
+        if 99.9, means we return the value of the largest 0.1% value in the tensor as percentile max
+    output_tensor: bool, default False
+        if True, this function returns tensors, otherwise it returns values
+    """
     input_length = input.shape[0]
 
     lower_index = round(input_length * (1 - lower_percentile * 0.01))
@@ -31,6 +45,9 @@ def get_percentile_min_max(input, lower_percentile, upper_percentile, output_ten
 def linear_quantize(input, scale, zero_point, inplace=False):
     """
     Quantize single-precision input tensor to integers with the given scaling factor and zeropoint.
+
+    Parameters:
+    ----------
     input: single-precision input tensor to be quantized
     scale: scaling factor for quantization
     zero_pint: shift for quantization
@@ -59,6 +76,9 @@ def symmetric_linear_quantization_params(num_bits,
                                         per_channel=False):
     """
     Compute the scaling factor with the given quantization range for symmetric quantization.
+
+    Parameters:
+    ----------
     saturation_min: lower bound for quantization range
     saturation_max: upper bound for quantization range
     """
@@ -77,9 +97,19 @@ def symmetric_linear_quantization_params(num_bits,
 
     return scale 
 
+
 class SymmetricQuantFunction(Function):
+    """
+    Class to quantize the given floating-point values using symmetric quantization with given range and bitwidth.
+    """
     @staticmethod
     def forward(ctx, x, k, percentile_mode=False, specified_scale=None):
+        """
+        x: floating point tensor to be quantized
+        k: quantization bitwidth
+        Note that the current implementation of SymmetricQuantFunction requires pre-calculated scaling factor.
+        specified_scale: pre-calculated scaling factor for the tensor x
+        """
         
         if specified_scale is not None:
             scale = specified_scale
@@ -107,50 +137,75 @@ class SymmetricQuantFunction(Function):
 
         return grad_output.clone() / scale, None, None, None, None
 
+
 class floor_ste(Function):
+    """
+    Straight-through Estimator(STE) for torch.floor()
+    """
     @staticmethod
     def forward(ctx, x):
         return torch.floor(x)
+
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output.clone()
 
+
 class round_ste(Function):
+    """
+    Straight-through Estimator(STE) for torch.round()
+    """
     @staticmethod
     def forward(ctx, x):
         return torch.round(x)
+
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output.clone()
 
-# z = w * x
-# inputs alpha_x * alpha_w / alpha_z
+
 def batch_frexp(inputs, max_bit=31):
-    #
+    """
+    Decompose the scaling factor into mantissa and twos exponent.
+
+    Parameters:
+    ----------
+    inputs: scaling factor
+    return: (mantissa, exponent)
+    """
+
     shape_of_input = inputs.size()
 
     # trans the input to be a 1-d tensor
     inputs = inputs.view(-1)
     
     output_m, output_e = np.frexp(inputs.cpu().numpy())
-    # print(output_m * (2 ** 31))
-    # output_m = np.round( output_m * (2 ** 31) )
     tmp_m = []
     for m in output_m:
         int_m_shifted = int(Decimal(m * (2**max_bit)).quantize(Decimal('1'), 
-                                                               rounding=decimal.ROUND_HALF_UP))
+            rounding=decimal.ROUND_HALF_UP))
         tmp_m.append(int_m_shifted)
     output_m = np.array(tmp_m)
-    # output_m = np.array(np.round( np.float64(output_m) * (2 ** 31)))
 
-    # inputs = [output_m*2^32] * 2^output_e / 2^32
-    # output_e = np.round(output_e - 31)
     output_e = float(max_bit) - output_e
 
     return torch.from_numpy( output_m ).cuda().view(shape_of_input), \
            torch.from_numpy( output_e ).cuda().view(shape_of_input)
 
 class fixedpoint_mul(Function):
+    """
+    Function to perform fixed-point arthmetic that can match integer arthmetic on hardware.
+
+    Parameters:
+    ----------
+    pre_act: input tensor
+    pre_act_scaling_factor: ithe scaling factor of the input tensor
+    bit_num: quantization bitwidth
+    quant_mode: The mode for quantization, 'symmetric' or 'asymmetric'
+    z_scaling_factor: the scaling factor of the output tensor
+    identity: identity tensor
+    identity_scaling_factor: the scaling factor of the identity tensor
+    """
     @ staticmethod
     def forward (ctx, pre_act, pre_act_scaling_factor, 
                  bit_num, quant_mode, z_scaling_factor, 
@@ -208,7 +263,6 @@ class fixedpoint_mul(Function):
                     return torch.clamp( output.type(torch.float), 0, n)
             else:
                 return output.type(torch.float)
-
 
     @ staticmethod
     def backward(ctx, grad_output):
