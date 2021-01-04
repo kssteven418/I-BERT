@@ -128,8 +128,7 @@ class TransformerSentenceEncoder(nn.Module):
         logger.info('Dropout {}, attn dropout {}, act dropout {}'.format(
             dropout, attention_dropout, activation_dropout))
 
-        self.embed_tokens = QuantEmbedding(weight_bit=self.embed_bit, 
-                quant_mode=self.quant_mode, per_channel=True)
+        self.embed_tokens = QuantEmbedding(weight_bit=self.embed_bit, quant_mode=self.quant_mode)
         self.embed_tokens.set_param(
             nn.Embedding(self.vocab_size, self.embedding_dim, self.padding_idx)
         )
@@ -146,8 +145,7 @@ class TransformerSentenceEncoder(nn.Module):
 
         self.segment_embeddings = None
         if self.num_segments > 0:
-            self.segment_embeddings = QuantEmbedding(weight_bit=self.embed_bit, 
-                    quant_mode=self.quant_mode, per_channel=True)
+            self.segment_embeddings = QuantEmbedding(weight_bit=self.embed_bit, quant_mode=self.quant_mode)
             self.segment_embeddings.set_param(
                nn.Embedding(self.num_segments, self.embedding_dim, padding_idx=None) 
             )

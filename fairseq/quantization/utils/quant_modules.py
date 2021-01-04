@@ -18,23 +18,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 class QuantEmbedding(Module):
+    """
+    Class to quantize given Embedding layer
+
+    Parameters:
+    activation_bit : int
+        Bitwidth for quantized weights.
+    is_positional : bool, default False
+        If the given Embedding layer is positional embedding.
+    momentum : float, default 0.95
+        Momentum for updating the activation quantization range.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    """
     def __init__(self,
                  weight_bit,
                  is_positional=False,
                  momentum=0.95,
-                 quant_mode='none',
-                 per_channel=False,
-                 show_flag=False,
-                 weight_percentile=False):
+                 quant_mode='none'):
         super(QuantEmbedding, self).__init__()
 
         self.weight_bit = weight_bit
         self.momentum = momentum
         self.quant_mode = quant_mode
-        self.per_channel = per_channel
         self.per_channel = False
-        self.show_flag = show_flag
-        self.weight_percentile = weight_percentile
+        self.percentile_mode = False
         self.is_positional = is_positional
 
         if self.quant_mode == "none":
@@ -61,7 +69,6 @@ class QuantEmbedding(Module):
         else:
             dim_scaling_factor = self.embedding_dim
         self.register_buffer('weight_scaling_factor', torch.zeros(dim_scaling_factor))
-        self.register_buffer('weight_zero_point', torch.zeros(dim_scaling_factor))
         self.register_buffer('weight_integer', torch.zeros_like(self.weight))
 
         if self.is_positional:
@@ -98,7 +105,7 @@ class QuantEmbedding(Module):
         self.weight_scaling_factor = symmetric_linear_quantization_params(
                     self.weight_bit, w_min, w_max, self.per_channel)
         self.weight_integer = self.weight_function(
-                    self.weight, self.weight_bit, self.weight_percentile, 
+                    self.weight, self.weight_bit, self.percentile_mode, 
                     self.weight_scaling_factor)
 
         if self.is_positional:
@@ -132,28 +139,40 @@ class QuantEmbedding(Module):
 
 
 # The input quantization needs to use symmetric quantization!
+
 class QuantAct(Module):
+    """
+    Class to quantize given activations
+
+    Parameters:
+    ----------
+    activation_bit : int
+        Bitwidth for quantized activations.
+    act_range_momentum : float, default 0.95
+        Momentum for updating the activation quantization range.
+    running_stat : bool, default True
+        Whether to use running statistics for activation quantization range.
+    per_channel : bool, default False
+        Whether to use channel-wise quantization.
+    channel_len : int, default None
+        Specify the channel length when using the per_channel mode.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    """
     def __init__(self,
                  activation_bit,
                  act_range_momentum=0.95,
                  running_stat=True,
-                 quant_mode="symmetric",
-                 show_flag=False,
-                 percentile=False,
-                 signed=True,
                  per_channel=False,
-                 channel_len=None):
+                 channel_len=None,
+                 quant_mode="none"):
         super(QuantAct, self).__init__()
 
         self.activation_bit = activation_bit
         self.act_range_momentum = act_range_momentum
         self.running_stat = running_stat
         self.quant_mode = quant_mode
-        self.show_flag = show_flag
-        self.percentile = percentile
-        self.signed = signed
-        self.iter_counter = 0
-        self.percentage = 99.9
+        self.percentile = False
 
         if not per_channel:
             self.register_buffer('x_min', torch.zeros(1))
@@ -187,14 +206,12 @@ class QuantAct(Module):
         fix the activation range by setting running stat
         """
         self.running_stat = False
-        self.show_flag = True
         
     def unfix(self):
         """
         unfix the activation range by setting running stat
         """
         self.running_stat = True
-        self.show_flag = False
 
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
@@ -216,7 +233,6 @@ class QuantAct(Module):
                 raise NotImplementedError("percentile mode is not currently supported.")
 
             # Initialization
-            #if self.x_min == self.x_max:
             if torch.eq(self.x_min, self.x_max).all():
                 self.x_min = self.x_min + x_min
                 self.x_max = self.x_max + x_max
@@ -263,32 +279,32 @@ class QuantAct(Module):
 
 class QuantLinear(Module):
     """
-    Class to quantize given linear layer weights
+    Class to quantize weights of given Linear layer
+    
+    Parameters:
+    ----------
+    weight_bit : int
+        Bitwidth for quantized weights.
+    bias_bit : int, default None
+        Bitwidth for quantized bias.
+    per_channel : bool, default False
+        Whether to use channel-wise quantization.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
     """
     def __init__(self,
                  weight_bit,
                  bias_bit=None,
-                 quant_mode='none',
                  per_channel=False,
-                 show_flag=False,
-                 weight_percentile=False,
-                 save_path=None,
-                 threshold=None):
-        """
-        weight: bit-setting for weight
-        running_stat: determines whether the activation range is updated or froze
-        """
+                 quant_mode='none'):
         super(QuantLinear, self).__init__()
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
         self.per_channel = per_channel
-        self.show_flag = show_flag
-        self.weight_percentile = weight_percentile
         self.bias_bit = bias_bit
         self.quantize_bias = (False if bias_bit is None else True)
         self.quant_mode = quant_mode
-        self.save_path = save_path
-        self.checkpoint_iter_threshold = threshold
+        self.percentile_mode = False
 
         if self.quant_mode == "none":
             pass
@@ -310,7 +326,6 @@ class QuantLinear(Module):
         self.out_features = linear.out_features
         self.weight = Parameter(linear.weight.data.clone())
         self.register_buffer('fc_scaling_factor', torch.zeros(self.out_features))
-        self.register_buffer('fc_zero_point', torch.zeros(self.out_features))
         self.register_buffer('weight_integer', torch.zeros_like(self.weight))
         try:
             self.bias = Parameter(linear.bias.data.clone())
@@ -319,20 +334,19 @@ class QuantLinear(Module):
         self.register_buffer('bias_integer', torch.zeros_like(self.bias))
 
     def fix(self):
-        self.show_flag = True
+        pass
 
     def unfix(self):
-        self.show_flag = False
+        pass
 
-    # prev_act_scaling_factor: used to scaling the bias term
-    # also, x / prev_act_scaling_factor = int
-    def forward(self, x, prev_act_scaling_factor=None, prev_act_zero_point=None):
+    def forward(self, x, prev_act_scaling_factor=None):
         """
         using quantized weights to forward activation x
         """
         if self.quant_mode == 'none':
             return F.linear(x, weight=self.weight, bias=self.bias), None
 
+    	# x / prev_act_scaling_factor = int
         assert self.quant_mode == 'symmetric', \
                 "unsupported quant mode: {}".format(quant_mode)
 
@@ -353,7 +367,7 @@ class QuantLinear(Module):
         self.fc_scaling_factor = symmetric_linear_quantization_params(
                 self.weight_bit, w_min, w_max, self.per_channel)
         self.weight_integer = self.weight_function(
-                self.weight, self.weight_bit, self.weight_percentile, 
+                self.weight, self.weight_bit, self.percentile_mode, 
                 self.fc_scaling_factor)
 
         bias_scaling_factor = self.fc_scaling_factor * prev_act_scaling_factor
@@ -369,9 +383,23 @@ class QuantLinear(Module):
 
 
 class IntLayerNorm(Module):
+    """
+    Class to quantize given LayerNorm layer
+
+    Parameters:
+    ----------
+    output_bit : int
+        Bitwidth for the LayerNorm output.
+    overflow_handling : bool, default True
+        Whether to do overflow handling if the intermediate values are larger than 32-bit.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    force_dequant : str, default 'none'
+        Force dequantize LayerNorm if either 'layernorm' or 'nonlinear' is given.
+    """
     def __init__(self,
                  output_bit,
-                 running_stat=True,
+                 overflow_handling=True,
                  quant_mode='none',
                  force_dequant='none'):
         super(IntLayerNorm, self).__init__()
@@ -379,7 +407,7 @@ class IntLayerNorm(Module):
         if force_dequant in ['nonlinear', 'layernorm']:
             logger.info("Force dequantize layernorm")
             self.quant_mode = 'none'
-        self.running_stat = running_stat
+        self.overflow_handling = overflow_handling
         self.register_buffer('shift', torch.zeros(1))
         self.output_bit = output_bit
         self.dim_sqrt = None
@@ -395,10 +423,10 @@ class IntLayerNorm(Module):
             raise ValueError("unknown quant mode: {}".format(quant_mode))
 
     def fix(self):
-        self.running_stat = False
+        self.overflow_handling = False
 
     def unfix(self):
-        self.running_stat = True
+        self.overflow_handling = True
 
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
@@ -448,7 +476,7 @@ class IntLayerNorm(Module):
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
         
         # overflow handling in training stage
-        if self.running_stat:
+        if self.overflow_handling:
             if var_int.max() >= 2**32:
                 var_int = self.overflow_fallback(y_int)
                 assert var_int.max() < 2**32
@@ -471,8 +499,17 @@ class IntLayerNorm(Module):
 
 
 class IntGELU(Module):
+    """
+    Class to quantize given GELU layer
+
+    Parameters:
+    ----------
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    force_dequant : str, default 'none'
+        Force dequantize GELU if either 'gelu' or 'nonlinear' is given.
+    """
     def __init__(self,
-                 running_stat=True,
                  quant_mode='none',
                  force_dequant='none'):
         super(IntGELU, self).__init__()
@@ -482,7 +519,6 @@ class IntGELU(Module):
             logger.info("Force dequantize gelu")
             self.quant_mode = 'none'
 
-        self.running_stat = running_stat
 
         if self.quant_mode == 'none':
             self.activation_fn = nn.GELU()
@@ -499,10 +535,10 @@ class IntGELU(Module):
         self.coeff[2] /= self.coeff[0]
 
     def fix(self):
-        self.running_stat = False
+        pass
 
     def unfix(self):
-        self.running_stat = True
+        pass
 
     def int_erf(self, x_int, scaling_factor):
         with torch.no_grad():
@@ -540,21 +576,29 @@ class IntGELU(Module):
 
 
 class IntSoftmax(Module):
+    """
+    Class to quantize given Softmax layer
+
+    Parameters:
+    ----------
+    output_bit : int
+        Bitwidth for the Softmax output.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    force_dequant : str, default 'none'
+        Force dequantize Softmax if either 'softmax' or 'nonlinear' is given.
+    """
     def __init__(self,
                  output_bit,
-                 onnx_trace,
-                 running_stat=True,
                  quant_mode='none',
                  force_dequant='none'):
         super(IntSoftmax, self).__init__()
         self.output_bit = output_bit
-        self.onnx_trace = onnx_trace
         self.quant_mode = quant_mode
         if force_dequant in ['nonlinear', 'softmax']:
             logger.info("Force dequantize softmax")
             self.quant_mode = 'none'
 
-        self.running_stat = running_stat
 
         self.act = QuantAct(16, quant_mode=self.quant_mode)
         self.x0 = -0.6931 # -ln2
@@ -564,10 +608,10 @@ class IntSoftmax(Module):
         self.coef[2] /= self.coef[0]
 
     def fix(self):
-        self.running_stat = False
+        pass
 
     def unfix(self):
-        self.running_stat = True
+        pass
 
     def int_polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
@@ -593,7 +637,7 @@ class IntSoftmax(Module):
 
     def forward(self, x, scaling_factor):
         if self.quant_mode == 'none':
-            return utils.softmax(x, dim=-1, onnx_trace=self.onnx_trace), None
+            return utils.softmax(x, dim=-1, onnx_trace=False), None
 
         assert self.quant_mode == 'symmetric', \
                 "unsupported quant mode: {}".format(quant_mode)

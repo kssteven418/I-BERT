@@ -101,7 +101,7 @@ class MultiheadAttention(nn.Module):
         self.v_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.q_proj_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-        self.softmax = IntSoftmax(self.softmax_output_bit, self.onnx_trace, 
+        self.softmax = IntSoftmax(self.softmax_output_bit, 
                                   quant_mode=self.quant_mode,
                                   force_dequant=self.force_dequant)
 
