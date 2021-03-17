@@ -8,7 +8,7 @@ Visit the following links for the HuggingFace implementation.
 
 Github Link: https://github.com/huggingface/transformers/tree/master/src/transformers/models/ibert
 
-Model Link: 
+Model Links: 
 * [ibert-roberta-base](https://huggingface.co/kssteven/ibert-roberta-base) 
 * [ibert-roberta-large](https://huggingface.co/kssteven/ibert-roberta-large)
 * [ibert-roberta-large-mnli](https://huggingface.co/kssteven/ibert-roberta-large-mnli)
