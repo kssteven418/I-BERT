@@ -2,6 +2,16 @@
 
 # I-BERT: Integer-only BERT Quantization
 
+## HuggingFace Implementation
+I-BERT is also available in the master branch of HuggingFace!
+Visit the following links for the HuggingFace implementation.
+
+Github Link: https://github.com/huggingface/transformers/tree/master/src/transformers/models/ibert
+
+Model Link: 
+* [ibert-roberta-base](https://huggingface.co/kssteven/ibert-roberta-base) 
+* [ibert-roberta-large](https://huggingface.co/kssteven/ibert-roberta-large)
+* [ibert-roberta-large-mnli](https://huggingface.co/kssteven/ibert-roberta-large-mnli)
 
 ## Installation & Requirements
 You can find more detailed installation guides from the Fairseq repo: https://github.com/pytorch/fairseq
