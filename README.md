@@ -108,3 +108,16 @@ CUDA_VISIBLE_DEVICES=0 python run.py --arch roberta_base --task MRPC --restore-f
 ```
 
 **NOTE:** Our work is still on progress. Currently, all integer operations are executed with floating point.
+
+
+## Citation
+I-BERT has been developed as part of the following paper. We appreciate it if you would please cite the following paper if you found the library useful for your work:
+
+```text
+@article{kim2021bert,
+  title={I-BERT: Integer-only BERT Quantization},
+  author={Kim, Sehoon and Gholami, Amir and Yao, Zhewei and Mahoney, Michael W and Keutzer, Kurt},
+  journal={International Conference on Machine Learning (Accepted)},
+  year={2021}
+}
+```
