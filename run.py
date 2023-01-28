@@ -79,7 +79,7 @@ task_specs = {
         'total_num_updates': '2036',
         'warm_updates': '122',
     },
-    'SST' : {
+    'SST-2' : {
         'dataset': 'SST-2-bin',
         'num_classes': '2',
         'lr': '1e-5',
@@ -192,7 +192,7 @@ subprocess_args = [
 if args.no_save:
     subprocess_args += ['--no-save']
 
-if args.task == 'sts':
+if args.task == 'STS-B':
     subprocess_args += ['--regression-target', '--best-checkpoint-metric', 'loss']
 else:
     subprocess_args.append('--maximize-best-checkpoint-metric')
